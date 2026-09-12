@@ -95,6 +95,12 @@ function fmtDateGR(iso: string) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
+// Some phones (Greek locale iPhones especially) only offer a comma on their
+// decimal keypad, and a plain HTML number input silently rejects commas -
+// so these fields are type="text" and we normalize here before parsing.
+function num(str: string) {
+  return parseFloat(str.replace(",", "."));
+}
 
 function useSound() {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -262,7 +268,7 @@ export default function VehicleDashboard({
   }, [entries]);
 
   function goToStep2() {
-    const cost = parseFloat(form.cost);
+    const cost = num(form.cost);
     if (!isFinite(cost) || cost <= 0) {
       setError("Γράψε πόσο κόστισε ο ανεφοδιασμός.");
       return;
@@ -272,12 +278,12 @@ export default function VehicleDashboard({
     setLogStep(2);
   }
 
-  const costNum = parseFloat(form.cost) || 0;
-  const manualPriceNum = parseFloat(manualPrice);
+  const costNum = num(form.cost) || 0;
+  const manualPriceNum = num(manualPrice);
   const effectivePrice = isFinite(manualPriceNum) && manualPriceNum > 0 ? manualPriceNum : lastPricePerLiter;
   const priceLitersEstimate = effectivePrice != null && costNum > 0 ? costNum / effectivePrice : null;
 
-  const odometerNum = parseFloat(form.odometer);
+  const odometerNum = num(form.odometer);
   const distanceSinceFull =
     form.isFull && isFinite(odometerNum) && lastFullOdometer != null ? odometerNum - lastFullOdometer : null;
   const fullTankLitersEstimate =
@@ -287,14 +293,14 @@ export default function VehicleDashboard({
   const litersEstimate = fullTankLitersEstimate != null ? fullTankLitersEstimate : priceLitersEstimate;
 
   async function addFillup() {
-    const cost = parseFloat(form.cost);
-    const liters = form.liters.trim() === "" ? litersEstimate : parseFloat(form.liters);
+    const cost = num(form.cost);
+    const liters = form.liters.trim() === "" ? litersEstimate : num(form.liters);
     if (!isFinite(cost) || cost <= 0 || !liters || !isFinite(liters) || liters <= 0) {
       setError("Συμπλήρωσε κόστος και λίτρα για την καταχώρηση.");
       return;
     }
 
-    let odometer = form.odometer.trim() === "" ? null : parseFloat(form.odometer);
+    let odometer = form.odometer.trim() === "" ? null : num(form.odometer);
     let odometerEstimated = false;
     if (odometer == null) {
       if (lastOdometer != null && knownEfficiency != null && knownEfficiency > 0) {
@@ -350,10 +356,10 @@ export default function VehicleDashboard({
   }
 
   async function saveEdit(id: string) {
-    const liters = parseFloat(editForm.liters);
-    const cost = parseFloat(editForm.cost);
+    const liters = num(editForm.liters);
+    const cost = num(editForm.cost);
     if (!editForm.date || !isFinite(liters) || liters <= 0 || !isFinite(cost) || cost <= 0) return;
-    const odometer = editForm.odometer.trim() === "" ? null : parseFloat(editForm.odometer);
+    const odometer = editForm.odometer.trim() === "" ? null : num(editForm.odometer);
 
     const res = await fetch(`/api/v/${slug}/fillups/${id}`, {
       method: "PATCH",
@@ -372,7 +378,7 @@ export default function VehicleDashboard({
       setServiceError("Διάλεξε ημερομηνία.");
       return;
     }
-    const odometer = serviceForm.odometer.trim() === "" ? null : parseFloat(serviceForm.odometer);
+    const odometer = serviceForm.odometer.trim() === "" ? null : num(serviceForm.odometer);
     const res = await fetch(`/api/v/${slug}/service`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -548,8 +554,9 @@ export default function VehicleDashboard({
                 </div>
                 <input
                   className="big-input"
-                  type="number"
+                  type="text"
                   inputMode="decimal"
+                  pattern="[0-9]*[.,]?[0-9]*"
                   placeholder="0€"
                   autoFocus
                   value={form.cost}
@@ -585,7 +592,7 @@ export default function VehicleDashboard({
                   onClick={() => { playTap(); setLogStep(1); }}
                   style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12.5, padding: 0, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}
                 >
-                  ‹ {fmtMoney(parseFloat(form.cost) || 0)}
+                  ‹ {fmtMoney(num(form.cost) || 0)}
                 </button>
 
                 <div style={{ textAlign: "center", fontSize: 12, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginBottom: 2 }}>
@@ -593,8 +600,9 @@ export default function VehicleDashboard({
                 </div>
                 <input
                   className="big-input"
-                  type="number"
+                  type="text"
                   inputMode="decimal"
+                  pattern="[0-9]*[.,]?[0-9]*"
                   placeholder={litersEstimate != null ? fmtNum(litersEstimate, 1) : "0"}
                   autoFocus
                   value={form.liters}
@@ -645,8 +653,9 @@ export default function VehicleDashboard({
                         </div>
                         <input
                           className="pill-input"
-                          type="number"
+                          type="text"
                           inputMode="decimal"
+                          pattern="[0-9]*[.,]?[0-9]*"
                           placeholder="προαιρετικό"
                           value={form.odometer}
                           onChange={(e) => setForm({ ...form, odometer: e.target.value })}
@@ -658,8 +667,9 @@ export default function VehicleDashboard({
                       <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>ΤΙΜΗ ΑΝΑ ΛΙΤΡΟ € (αν την ξέρεις)</div>
                       <input
                         className="pill-input"
-                        type="number"
+                        type="text"
                         inputMode="decimal"
+                        pattern="[0-9]*[.,]?[0-9]*"
                         placeholder={lastPricePerLiter != null ? fmtNum(lastPricePerLiter, 2) : "π.χ. 1.65"}
                         value={manualPrice}
                         onChange={(e) => setManualPrice(e.target.value)}
@@ -690,9 +700,9 @@ export default function VehicleDashboard({
                   </div>
                 )}
 
-                {tankCapacity && parseFloat(form.liters) > 0 && (
+                {tankCapacity && num(form.liters) > 0 && (
                   <div className="animate-fade" style={{ fontSize: 10.5, lineHeight: 1.3, color: "var(--muted)", opacity: 0.65, textAlign: "center", margin: "2px 0" }}>
-                    ≈{Math.round((parseFloat(form.liters) / tankCapacity) * 100)}% του ρεζερβουάρ ({tankCapacity} L)
+                    ≈{Math.round((num(form.liters) / tankCapacity) * 100)}% του ρεζερβουάρ ({tankCapacity} L)
                   </div>
                 )}
 
@@ -796,17 +806,17 @@ export default function VehicleDashboard({
                                 </div>
                                 <div style={{ flex: 1 }}>
                                   <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΧΙΛΙΟΜΕΤΡΑ</div>
-                                  <input className="pill-input" type="number" inputMode="decimal" placeholder="προαιρετικό" style={{ fontSize: 14 }} value={editForm.odometer} onChange={(ev) => setEditForm({ ...editForm, odometer: ev.target.value })} />
+                                  <input className="pill-input" type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="προαιρετικό" style={{ fontSize: 14 }} value={editForm.odometer} onChange={(ev) => setEditForm({ ...editForm, odometer: ev.target.value })} />
                                 </div>
                               </div>
                               <div className="fillup-row" style={{ marginBottom: 12 }}>
                                 <div style={{ flex: 1 }}>
                                   <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΛΙΤΡΑ</div>
-                                  <input className="pill-input" type="number" inputMode="decimal" style={{ fontSize: 14 }} value={editForm.liters} onChange={(ev) => setEditForm({ ...editForm, liters: ev.target.value })} />
+                                  <input className="pill-input" type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" style={{ fontSize: 14 }} value={editForm.liters} onChange={(ev) => setEditForm({ ...editForm, liters: ev.target.value })} />
                                 </div>
                                 <div style={{ flex: 1 }}>
                                   <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΚΟΣΤΟΣ €</div>
-                                  <input className="pill-input" type="number" inputMode="decimal" style={{ fontSize: 14 }} value={editForm.cost} onChange={(ev) => setEditForm({ ...editForm, cost: ev.target.value })} />
+                                  <input className="pill-input" type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" style={{ fontSize: 14 }} value={editForm.cost} onChange={(ev) => setEditForm({ ...editForm, cost: ev.target.value })} />
                                 </div>
                               </div>
                               <button
@@ -947,7 +957,7 @@ export default function VehicleDashboard({
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>ΧΙΛΙΟΜΕΤΡΑ</div>
-                  <input className="pill-input" type="number" inputMode="decimal" placeholder="προαιρετικό" value={serviceForm.odometer} onChange={(e) => setServiceForm({ ...serviceForm, odometer: e.target.value })} />
+                  <input className="pill-input" type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="προαιρετικό" value={serviceForm.odometer} onChange={(e) => setServiceForm({ ...serviceForm, odometer: e.target.value })} />
                 </div>
               </div>
 
