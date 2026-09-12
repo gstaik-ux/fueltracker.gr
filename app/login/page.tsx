@@ -30,11 +30,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", position: "relative" }}>
+    <div style={{ minHeight: "100vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div className="login-bg" />
       <div
         className="animate-in"
-        style={{ "--accent": "#ffffff", position: "relative", paddingTop: "20vh", maxWidth: 480, margin: "0 auto", padding: "0 18px" } as React.CSSProperties}
+        style={{ "--accent": "#ffffff", position: "relative", maxWidth: 480, width: "100%", margin: "0 auto", padding: "0 18px" } as React.CSSProperties}
       >
         <div style={{ textAlign: "center", marginBottom: 22, position: "relative" }}>
           <span

@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import { Fuel, Car, Bike, ChevronRight } from "lucide-react";
+import AddVehicleForm from "./AddVehicleForm";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,8 @@ export default async function Home() {
             );
           })}
         </div>
+
+        <AddVehicleForm />
       </div>
     </div>
   );

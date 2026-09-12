@@ -586,17 +586,17 @@ export default function VehicleDashboard({
             )}
 
             {!loggedThisVisit && logStep === 2 && (
-              <div className="card animate-in" style={{ padding: "20px 20px 22px" }}>
+              <div className="card animate-in" style={{ padding: "28px 20px 22px", position: "relative" }}>
                 <button
                   className="tap"
                   onClick={() => { playTap(); setLogStep(1); }}
-                  style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12.5, padding: 0, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}
+                  style={{ position: "absolute", top: 6, left: 18, background: "none", border: "none", color: "var(--muted)", fontSize: 12.5, lineHeight: 1, padding: 0, margin: 0, display: "flex", alignItems: "center", gap: 4 }}
                 >
                   ‹ {fmtMoney(num(form.cost) || 0)}
                 </button>
 
-                <div style={{ textAlign: "center", fontSize: 12, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginBottom: 2 }}>
-                  Λίτρα
+                <div style={{ textAlign: "center", fontSize: 12, lineHeight: 1, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginBottom: 2 }}>
+                  Λίτρα L
                 </div>
                 <input
                   className="big-input"
@@ -611,9 +611,8 @@ export default function VehicleDashboard({
                 />
 
                 <button
-                  className="tap"
                   onClick={() => { playTap(); setShowDateFields((s) => !s); }}
-                  style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12.5, padding: "10px 0", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", gap: 4 }}
+                  style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12.5, lineHeight: 1, padding: "2px 0", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", gap: 4 }}
                 >
                   {showDateFields ? "Απόκρυψη επιλογών" : "Περισσότερες επιλογές"}
                   <ChevronDown className="chev" size={13} style={{ transform: showDateFields ? "rotate(180deg)" : "none" }} />
