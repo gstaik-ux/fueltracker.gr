@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { createDocsToken, docsCookieName, DOCS_COOKIE_OPTIONS } from "@/lib/auth";
 
-// Stores the photo as a base64 data URL directly in the vehicles table.
-// For a personal app with a handful of documents (insurance + ΚΤΕΟ across a
-// few vehicles) this is simple and avoids setting up Supabase Storage - a
-// few photos add up to kilobytes against Supabase's free-tier 500MB limit,
-// nowhere close to a concern. If photos are ever consistently huge (many MB
-// each, e.g. uncompressed camera originals), moving this to Supabase
-// Storage would be the next step, but isn't needed for this use case.
+// Stores the document (photo or PDF) as a base64 data URL directly in the
+// vehicles table. For a personal app with a handful of documents (insurance
+// + ΚΤΕΟ across a few vehicles) this is simple and avoids setting up
+// Supabase Storage - a few files add up to kilobytes against Supabase's
+// free-tier 500MB limit, nowhere close to a concern. If files are ever
+// consistently huge (many MB each), moving this to Supabase Storage would
+// be the next step, but isn't needed for this use case.
 const COLUMN_MAP: Record<string, string> = {
   insurancePhotoUrl: "insurance_photo_url",
   kteoPhotoUrl: "kteo_photo_url",
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
     return NextResponse.json({ error: "Missing file or field" }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "Η φωτογραφία είναι πολύ μεγάλη." }, { status: 400 });
+    return NextResponse.json({ error: "Το αρχείο είναι πολύ μεγάλο." }, { status: 400 });
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
@@ -33,5 +34,12 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
 
   await query(`update vehicles set ${column} = $1 where slug = $2`, [dataUrl, params.slug]);
 
-  return NextResponse.json({ url: dataUrl });
+  // Whoever just uploaded this is already trusted enough to see it -
+  // unlock document viewing on this device, for this vehicle specifically.
+  // If no password has been set yet for this vehicle, this cookie simply
+  // won't matter (there's no lock to check it against).
+  const res = NextResponse.json({ ok: true, url: dataUrl });
+  const token = await createDocsToken(params.slug);
+  res.cookies.set(docsCookieName(params.slug), token, DOCS_COOKIE_OPTIONS);
+  return res;
 }

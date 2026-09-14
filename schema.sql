@@ -55,6 +55,7 @@ alter table vehicles add column if not exists insurance_date date;
 alter table vehicles add column if not exists kteo_date date;
 alter table vehicles add column if not exists insurance_photo_url text;
 alter table vehicles add column if not exists kteo_photo_url text;
+alter table vehicles add column if not exists docs_password_hash text;
 alter table service_entries add column if not exists is_trip boolean not null default false;
 
 -- Add your vehicles here (edit and run once per vehicle):

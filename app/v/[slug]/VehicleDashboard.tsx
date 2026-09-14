@@ -16,6 +16,7 @@ import {
   Car,
   Bike,
   FileText,
+  Download,
   Sparkles,
   Camera,
   Coins,
@@ -24,6 +25,9 @@ import {
   Bell,
   Gauge,
   Zap,
+  Lock,
+  Eye,
+  X,
 } from "lucide-react";
 
 type Fillup = {
@@ -271,11 +275,11 @@ type Vehicle = {
   vehicleIcon: string;
   tankCapacity: number | null;
   plateNumber: string | null;
-  vin: string | null;
   insuranceDate: string | null;
   kteoDate: string | null;
-  insurancePhotoUrl: string | null;
-  kteoPhotoUrl: string | null;
+  hasInsurancePhoto: boolean;
+  hasKteoPhoto: boolean;
+  hasDocsPassword: boolean;
   lastOdometer: number | null;
 };
 
@@ -784,18 +788,22 @@ export default function VehicleDashboard({
     });
   }
 
-  async function updateDocPhoto(field: "insurancePhotoUrl" | "kteoPhotoUrl", file: File) {
+  async function updateDocPhoto(field: "insurancePhotoUrl" | "kteoPhotoUrl", file: File): Promise<string | null> {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("field", field);
     const res = await fetch(`/api/v/${slug}/photo`, { method: "POST", body: formData });
     if (res.ok) {
       const data = await res.json();
-      setVehicle((v) => ({ ...v, [field]: data.url }));
+      const flag = field === "insurancePhotoUrl" ? "hasInsurancePhoto" : "hasKteoPhoto";
+      setVehicle((v) => ({ ...v, [flag]: true }));
+      return data.url as string;
     }
+    return null;
   }
   async function removeDocPhoto(field: "insurancePhotoUrl" | "kteoPhotoUrl") {
-    setVehicle((v) => ({ ...v, [field]: null }));
+    const flag = field === "insurancePhotoUrl" ? "hasInsurancePhoto" : "hasKteoPhoto";
+    setVehicle((v) => ({ ...v, [flag]: false }));
     await fetch(`/api/v/${slug}/details`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1419,8 +1427,10 @@ export default function VehicleDashboard({
                 )}
               </div>
 
-              <DocCard title="Ασφάλεια" Icon={FileText} dateVal={vehicle.insuranceDate} onChange={(v) => updateDocDate("insuranceDate", v)} photoUrl={vehicle.insurancePhotoUrl} onPhoto={(f) => updateDocPhoto("insurancePhotoUrl", f)} onRemovePhoto={() => removeDocPhoto("insurancePhotoUrl")} accent={themeAccent} />
-              <DocCard title="ΚΤΕΟ" Icon={FileText} dateVal={vehicle.kteoDate} onChange={(v) => updateDocDate("kteoDate", v)} photoUrl={vehicle.kteoPhotoUrl} onPhoto={(f) => updateDocPhoto("kteoPhotoUrl", f)} onRemovePhoto={() => removeDocPhoto("kteoPhotoUrl")} accent={themeAccent} />
+              <DocsPasswordCard slug={slug} hasPassword={vehicle.hasDocsPassword} accent={themeAccent} onSet={() => setVehicle((v) => ({ ...v, hasDocsPassword: true }))} />
+
+              <DocCard slug={slug} field="insurance" title="Ασφάλεια" Icon={FileText} dateVal={vehicle.insuranceDate} onChange={(v) => updateDocDate("insuranceDate", v)} hasPhoto={vehicle.hasInsurancePhoto} hasPassword={vehicle.hasDocsPassword} onPhoto={(f) => updateDocPhoto("insurancePhotoUrl", f)} onRemovePhoto={() => removeDocPhoto("insurancePhotoUrl")} onPasswordJustSet={() => setVehicle((v) => ({ ...v, hasDocsPassword: true }))} accent={themeAccent} />
+              <DocCard slug={slug} field="kteo" title="ΚΤΕΟ" Icon={FileText} dateVal={vehicle.kteoDate} onChange={(v) => updateDocDate("kteoDate", v)} hasPhoto={vehicle.hasKteoPhoto} hasPassword={vehicle.hasDocsPassword} onPhoto={(f) => updateDocPhoto("kteoPhotoUrl", f)} onRemovePhoto={() => removeDocPhoto("kteoPhotoUrl")} onPasswordJustSet={() => setVehicle((v) => ({ ...v, hasDocsPassword: true }))} accent={themeAccent} />
             </>
           )}
 
@@ -1624,10 +1634,10 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 }
 
 function DocCard({
-  title, Icon, dateVal, onChange, accent, photoUrl, onPhoto, onRemovePhoto,
+  slug, field, title, Icon, dateVal, onChange, accent, hasPhoto, hasPassword, onPhoto, onRemovePhoto, onPasswordJustSet,
 }: {
-  title: string; Icon: any; dateVal: string | null; onChange: (v: string) => void; accent: string;
-  photoUrl: string | null; onPhoto: (f: File) => void; onRemovePhoto: () => void;
+  slug: string; field: "insurance" | "kteo"; title: string; Icon: any; dateVal: string | null; onChange: (v: string) => void; accent: string;
+  hasPhoto: boolean; hasPassword: boolean; onPhoto: (f: File) => Promise<string | null>; onRemovePhoto: () => void; onPasswordJustSet: () => void;
 }) {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const days = daysUntil(dateVal);
@@ -1637,12 +1647,55 @@ function DocCard({
     statusText = days < 0 ? `Έληξε πριν από ${Math.abs(days)} ημέρες` : days <= 30 ? `Λήγει σε ${days} ημέρες` : `Ισχύει έως ${fmtDateGR(dateVal!)}`;
   }
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  // The actual file content is never part of the page load - it's fetched
+  // on demand from a route that checks this vehicle's specific ~1 year
+  // password-gated cookie. Once fetched this visit, it stays visible
+  // without asking again until the page reloads.
+  const [unlockedUrl, setUnlockedUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [showViewer, setShowViewer] = useState(false);
+  const isPdf = unlockedUrl != null && unlockedUrl.startsWith("data:application/pdf");
+
+  async function fetchDocument() {
+    setLoading(true);
+    const res = await fetch(`/api/v/${slug}/document/${field}`);
+    setLoading(false);
+    if (res.ok) {
+      const data = await res.json();
+      setUnlockedUrl(data.url);
+      setShowPasswordPrompt(false);
+    } else {
+      setShowPasswordPrompt(true);
+    }
+  }
+
+  async function submitPassword() {
+    setPasswordError("");
+    const res = await fetch(`/api/v/${slug}/docs-unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: passwordInput }),
+    });
+    if (res.ok) {
+      setPasswordInput("");
+      await fetchDocument();
+    } else {
+      setPasswordError("Λάθος κωδικός.");
+    }
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files && e.target.files[0];
-    if (file) onPhoto(file);
+    if (!file) return;
+    const url = await onPhoto(file);
+    if (url) setUnlockedUrl(url); // uploading unlocks viewing on this device too
   }
 
   return (
+    <>
     <div className="animate-in card" style={{ padding: "18px 18px 20px", marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <span className="row-icon" style={{ background: `${accent}22` }}><Icon size={16} color={accent} /></span>
@@ -1654,18 +1707,169 @@ function DocCard({
         <input ref={dateInputRef} type="date" value={dateVal || ""} onChange={(e) => onChange(e.target.value)} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", border: "none" }} />
       </div>
 
-      {photoUrl ? (
-        <div style={{ position: "relative" }}>
-          <img src={photoUrl} alt={title} style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 12, display: "block" }} />
-          <button onClick={onRemovePhoto} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 999, color: "#fff", fontSize: 11, fontWeight: 600, padding: "6px 10px" }}>
-            Αφαίρεση
+      {hasPhoto ? (
+        unlockedUrl ? (
+          isPdf ? (
+            <div style={{ position: "relative", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ width: "100%", height: 100, background: "rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <FileText size={26} color={accent} />
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>PDF έγγραφο</div>
+              </div>
+              <button onClick={onRemovePhoto} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 999, color: "#fff", fontSize: 11, fontWeight: 600, padding: "6px 10px" }}>
+                Αφαίρεση
+              </button>
+              <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 6 }}>
+                <button onClick={() => setShowViewer(true)} style={{ width: 30, height: 30, borderRadius: 99, background: "rgba(0,0,0,0.6)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                  <Eye size={14} />
+                </button>
+                <a href={unlockedUrl} download={`${title}.pdf`} style={{ width: 30, height: 30, borderRadius: 99, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                  <Download size={14} />
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div style={{ position: "relative", borderRadius: 12, overflow: "hidden" }}>
+              <img src={unlockedUrl} alt={title} style={{ width: "100%", maxHeight: 180, objectFit: "cover", display: "block" }} />
+              <button onClick={onRemovePhoto} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 999, color: "#fff", fontSize: 11, fontWeight: 600, padding: "6px 10px" }}>
+                Αφαίρεση
+              </button>
+              <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 6 }}>
+                <button onClick={() => setShowViewer(true)} style={{ width: 30, height: 30, borderRadius: 99, background: "rgba(0,0,0,0.6)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                  <Eye size={14} />
+                </button>
+                <a href={unlockedUrl} download={`${title}.jpg`} style={{ width: 30, height: 30, borderRadius: 99, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                  <Download size={14} />
+                </a>
+              </div>
+            </div>
+          )
+        ) : showPasswordPrompt ? (
+          <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <Lock size={18} color={accent} style={{ marginBottom: 8 }} />
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Προστατευμένο έγγραφο</div>
+              <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginBottom: 12, lineHeight: 1.4 }}>
+                Χρειάζεται ο κωδικός που όρισες για να δεις και να κατεβάσεις αυτό το έγγραφο.
+              </div>
+              <input
+                className="pill-input"
+                type="password"
+                placeholder="Κωδικός"
+                value={passwordInput}
+                onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") submitPassword(); }}
+                style={{ marginBottom: 8, textAlign: "center", width: "100%" }}
+              />
+              {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", marginBottom: 8 }}>{passwordError}</div>}
+              <button onClick={submitPassword} className="tap" style={{ width: "100%", background: accent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "10px 0" }}>
+                Ξεκλείδωμα
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={fetchDocument}
+            disabled={loading}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}
+          >
+            <Lock size={13} /> {loading ? "..." : "Προβολή εγγράφου"}
           </button>
-        </div>
+        )
       ) : (
         <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)", cursor: "pointer" }}>
-          <Camera size={15} /> Προσθήκη φωτογραφίας
-          <input type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
+          <Camera size={15} /> Προσθήκη εγγράφου
+          <input type="file" accept="image/*,application/pdf" onChange={handleFile} style={{ display: "none" }} />
         </label>
+      )}
+    </div>
+
+    {showViewer && unlockedUrl && (
+      <div
+        onClick={() => setShowViewer(false)}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      >
+        <button
+          onClick={() => setShowViewer(false)}
+          style={{ position: "fixed", top: "calc(20px + env(safe-area-inset-top, 0px))", right: 20, width: 40, height: 40, borderRadius: 99, background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <X size={20} />
+        </button>
+        {isPdf ? (
+          <iframe src={unlockedUrl} title={title} onClick={(e) => e.stopPropagation()} style={{ width: "92vw", height: "85vh", border: "none", borderRadius: 12, background: "#fff" }} />
+        ) : (
+          <img src={unlockedUrl} alt={title} onClick={(e) => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12, objectFit: "contain" }} />
+        )}
+      </div>
+    )}
+    </>
+  );
+}
+
+function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; hasPassword: boolean; accent: string; onSet: () => void }) {
+  const [showForm, setShowForm] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+
+  async function save() {
+    setError("");
+    const res = await fetch(`/api/v/${slug}/docs-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: draft }),
+    });
+    if (res.ok) {
+      setDraft("");
+      setShowForm(false);
+      onSet();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Κάτι πήγε στραβά.");
+    }
+  }
+
+  // Once a password exists, this card disappears from the app entirely -
+  // there's no edit path, by design (see the docs-password route).
+  if (hasPassword) return null;
+
+  return (
+    <div className="animate-in card" style={{ padding: "18px 18px 20px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: showForm ? 12 : 4 }}>
+        <span className="row-icon" style={{ background: `${accent}22` }}><Lock size={16} color={accent} /></span>
+        <div className="display" style={{ fontSize: 15, fontWeight: 700 }}>Κωδικός Εγγράφων</div>
+      </div>
+
+      {showForm ? (
+        <>
+          <input
+            className="pill-input"
+            type="password"
+            placeholder="Όρισε κωδικό"
+            value={draft}
+            onChange={(e) => { setDraft(e.target.value); setError(""); }}
+            style={{ marginBottom: 10, textAlign: "center" }}
+          />
+          <div style={{ fontSize: 10.5, color: "var(--muted)", opacity: 0.7, marginBottom: 10, textAlign: "center" }}>
+            Ορίζεται μία φορά και δεν αλλάζει ξανά από εδώ - κράτησέ τον κάπου ασφαλές.
+          </div>
+          {error && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", marginBottom: 8 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="tap" onClick={save} style={{ flex: 1, background: accent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13.5, fontWeight: 700, padding: "11px 0" }}>
+              Αποθήκευση
+            </button>
+            <button className="tap" onClick={() => { setShowForm(false); setDraft(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 13, padding: "0 10px" }}>
+              Άκυρο
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
+            Χωρίς κωδικό, όποιος ανοίξει τον σύνδεσμο του οχήματος μπορεί να δει τα έγγραφα. Πρόσθεσε έναν κωδικό μόνο για αυτό το όχημα.
+          </div>
+          <button className="tap" onClick={() => setShowForm(true)} style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 999, color: "var(--text)", fontSize: 13.5, fontWeight: 600, padding: "11px 0" }}>
+            Ορισμός κωδικού
+          </button>
+        </>
       )}
     </div>
   );

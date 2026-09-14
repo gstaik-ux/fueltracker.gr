@@ -29,6 +29,38 @@ once against your existing data. It adds: plate number, VIN, insurance
 date, ΚΤΕΟ date, insurance/ΚΤΕΟ photo storage, and a trip-expense flag on
 service entries.
 
+## Document privacy
+
+Insurance/ΚΤΕΟ **photos and PDFs** are gated behind a password - but a
+**separate password per vehicle**, set once by whoever manages that
+vehicle, not shared with the admin login and not reusable across vehicles.
+
+- The password is **hashed with bcrypt** before it touches the database -
+  never stored in plain text.
+- It can only be **set once**. Once a vehicle has a password, the "set
+  password" card disappears from the app entirely - there's no edit or
+  change path anywhere in the UI, and the API route itself refuses a
+  second attempt even if called directly. If a family genuinely forgets
+  their vehicle's password, the only way to reset it is running this in
+  Supabase's SQL Editor for that one vehicle:
+  `update vehicles set docs_password_hash = null where slug = 'yourslug';`
+  (that just clears it so the "set password" card reappears - it doesn't
+  reveal the old one, since it's hashed).
+- Unlocking sets a cookie **scoped to that one vehicle's slug** - a cookie
+  from one vehicle's unlock can't be reused to unlock a different vehicle.
+- That cookie lasts about a **year**, meant to be entered once per device
+  and then forgotten about.
+- Uploading a document automatically unlocks viewing on that same device
+  too, so whoever adds a file isn't immediately asked for the password to
+  see what they just uploaded.
+- Everything else on a vehicle's page (dates, fuel log, service history)
+  stays exactly as open as before - only the actual uploaded file content
+  requires this.
+- The document content itself is never included in the page's initial
+  load - it's fetched separately through a route that checks the cookie
+  server-side first, so there's nothing to find in page source or dev
+  tools without unlocking.
+
 ## 2. Environment variables
 
 Same three as before - `DATABASE_URL`, `JWT_SECRET`, `ADMIN_PASSWORD`. No
