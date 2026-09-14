@@ -1540,7 +1540,7 @@ export default function VehicleDashboard({
       {vehicle && showNotifications && (
         <div
           ref={notificationDropdownRef}
-          className="animate-fade"
+          className="animate-fade no-scrollbar"
           style={{ position: "fixed", top: 74, right: 18, width: 260, maxHeight: 280, overflowY: "auto", padding: "8px 0", zIndex: 9999, background: "#131417", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.6)" }}
         >
           {reminderNotifications.length === 0 ? (
