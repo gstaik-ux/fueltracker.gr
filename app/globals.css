@@ -136,3 +136,16 @@ button:active { transform: scale(0.96); }
   pointer-events: none;
   z-index: 0;
 }
+
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 37%, rgba(255,255,255,0.04) 63%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 10px;
+}
+button { outline: none; }
+button::-moz-focus-inner { border: 0; }

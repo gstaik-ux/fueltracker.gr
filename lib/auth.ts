@@ -8,7 +8,7 @@ export async function createAdminToken() {
   return new SignJWT({ admin: true })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime("1h")
     .sign(secret);
 }
 
@@ -26,5 +26,5 @@ export const ADMIN_COOKIE_OPTIONS = {
   secure: true as const,
   sameSite: "lax" as const,
   path: "/",
-  maxAge: 60 * 60 * 24 * 30, // 30 days
+  maxAge: 60 * 60, // 1 hour
 };

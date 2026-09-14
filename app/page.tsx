@@ -1,6 +1,7 @@
 import { query } from "@/lib/db";
 import { Fuel, Car, Bike, ChevronRight } from "lucide-react";
 import AddVehicleForm from "./AddVehicleForm";
+import AdminBackupButton from "./AdminBackupButton";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ export default async function Home() {
         </div>
 
         <AddVehicleForm />
+        <AdminBackupButton />
       </div>
     </div>
   );

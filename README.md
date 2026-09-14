@@ -1,56 +1,57 @@
-# Fuel Log v2
+# Fuel Log v3
 
-Per-vehicle fuel and maintenance tracker. Each vehicle has a permanent link
-(what the NFC tags point to) with no login. The homepage, which lists every
-vehicle, is protected by a single admin password.
+The full vehicle tracker - fuel, service history, trip mode with live
+expenses, insurance/ΚΤΕΟ document tracking with photos, and an admin-only
+full backup. Each vehicle has a permanent link (what the NFC tags point to)
+with no login required; the homepage listing every vehicle is behind a
+single admin password.
 
 ## What's new in this version
 
-- Admin password gate on `/` only - `/v/<slug>` pages stay completely open
-- Cost-first, two-step logging flow with smart estimates:
-  - Liters estimated from cost ÷ last known price per liter (or a price you type in on the spot)
-  - Odometer estimated from the car's own known L/100km when left blank
-  - If a fill-up is marked "full" and you enter the odometer, liters gets calculated from the real distance since the last full tank - more accurate than any price guess
-- Trip mode toggle + a quick pre-trip checklist (tires, oil, lights, etc. - this checklist is intentionally not saved anywhere, it's just an in-the-moment reminder)
-- "Full tank?" toggle, with a live "% of tank" hint if you set a tank capacity
-- Edit and delete on every fill-up, both with confirmation
-- A separate Service/Maintenance log per vehicle (oil, tires, filters, washer fluid, or just "Σέρβις" for vehicles where everything's done together) with a reminder banner when an oil change looks overdue
-- Per-vehicle accent color, background color, and icon (car or bike)
+- **5-tab navigation** per vehicle: Αρχική (overview + stacked, filterable
+  spend chart + full history), Έγγραφα (plate/VIN, insurance, ΚΤΕΟ - each
+  with a photo), Καύσιμο (the fill-up flow), Συντήρηση (maintenance log),
+  Εκδρομή (trip mode)
+- **Trip mode**: a pre-trip checklist plus live expense logging (tolls,
+  food, other) while you're actually on the road
+- **Notification bell** in the header - color-coded oil/insurance/ΚΤΕΟ
+  reminders (green >30 days, yellow 16-30, red ≤15 or overdue), tap one to
+  jump straight to the right tab
+- **Swipe left to delete** any history row
+- **Admin-only full backup** - one JSON file with every vehicle's complete
+  history, separate from the app's regular use
 
 ## 1. Database
 
-Run `schema.sql` in Supabase's SQL Editor. If you already have the older
-version of this app running, use the "UPGRADING" block at the bottom of that
-file instead of the whole thing.
-
-Then add your vehicles (edit the example inserts at the bottom of
-`schema.sql` with your real slugs, names, colors, icon, and tank capacity).
+Run the **UPGRADE** block near the top of `schema.sql` in Supabase's SQL
+Editor - it's all `if not exists` / `add column if not exists`, safe to run
+once against your existing data. It adds: plate number, VIN, insurance
+date, ΚΤΕΟ date, insurance/ΚΤΕΟ photo storage, and a trip-expense flag on
+service entries.
 
 ## 2. Environment variables
 
-Copy `.env.example` to `.env.local` for local dev, and set the same three in
-your Vercel project (Settings → Environment Variables):
-
-- `DATABASE_URL` — your Supabase connection string
-- `JWT_SECRET` — any long random string (`openssl rand -hex 32`)
-- `ADMIN_PASSWORD` — the code you'll type at `/` to see the vehicle list
+Same three as before - `DATABASE_URL`, `JWT_SECRET`, `ADMIN_PASSWORD`. No
+new ones needed; photos are stored directly in the database as base64 (a
+handful of document photos is nowhere near Supabase's free-tier 500MB
+limit, so no separate file storage setup is required).
 
 ## 3. Deploy
 
-Push to GitHub, import into Vercel (or reuse your existing project - just
-push these files over the old ones), set the env vars above, deploy.
+Push to GitHub, Vercel picks it up automatically the same way as before.
 
-## 4. Point your NFC tags
+## 4. What to check after deploying
 
-Each tag's link is:
-
-```
-https://your-app.vercel.app/v/<slug>
-```
-
-If you're upgrading from the old version, note that this port used new
-slugs for two vehicles - update the physical tags if the slugs changed
-(check what you inserted in `schema.sql`).
+- Open a vehicle - you should land on **Αρχική** with a quick "Καλημέρα"/
+  "Καλησπέρα" greeting before it settles to the vehicle name
+- Try **Έγγραφα**: set an insurance date a few days out, confirm the color
+  changes correctly, and upload a photo
+- Try **Εκδρομή**: turn it on, log a toll or food expense, confirm it shows
+  up back on **Αρχική** with a small plane badge
+- Tap the bell (top right) - if any vehicle has an overdue reminder built
+  into its data already, it should show there with the right color
+- From the **admin homepage** (password-protected `/`), try "Λήψη πλήρους
+  αντιγράφου (JSON)" - confirm it downloads a file with your real data
 
 ## Local development
 

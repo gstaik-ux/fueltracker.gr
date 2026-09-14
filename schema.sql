@@ -33,14 +33,29 @@ create index if not exists fillups_vehicle_idx on fillups(vehicle_id, date desc)
 create table if not exists service_entries (
   id uuid primary key default gen_random_uuid(),
   vehicle_id uuid not null references vehicles(id) on delete cascade,
-  type text not null,                 -- 'oil' | 'tires' | 'filter' | 'washer' | 'other' | 'general'
+  type text not null,                 -- 'oil' | 'tires' | 'filter' | 'washer' | 'wash' | 'other' | 'general'
   date date not null,
   odometer numeric,
+  cost numeric,                       -- optional, mainly used for washes
   note text,
   created_at timestamptz not null default now()
 );
 
 create index if not exists service_vehicle_idx on service_entries(vehicle_id, date desc);
+
+-- ============================================================
+-- UPGRADE (run this in Supabase's SQL Editor - safe to run once,
+-- every statement is if-not-exists / if-not-already-there):
+-- adds vehicle documents (plate, VIN, insurance, ΚΤΕΟ + photos)
+-- and tags trip-mode expenses (tolls/food) on service_entries.
+-- ============================================================
+alter table vehicles add column if not exists plate_number text;
+alter table vehicles add column if not exists vin text;
+alter table vehicles add column if not exists insurance_date date;
+alter table vehicles add column if not exists kteo_date date;
+alter table vehicles add column if not exists insurance_photo_url text;
+alter table vehicles add column if not exists kteo_photo_url text;
+alter table service_entries add column if not exists is_trip boolean not null default false;
 
 -- Add your vehicles here (edit and run once per vehicle):
 -- insert into vehicles (slug, name, theme_accent, theme_bg, vehicle_icon, tank_capacity)
@@ -61,6 +76,7 @@ create index if not exists service_vehicle_idx on service_entries(vehicle_id, da
 -- alter table fillups add column if not exists odometer_estimated boolean not null default false;
 -- alter table fillups add column if not exists is_trip boolean not null default false;
 -- alter table fillups add column if not exists is_full boolean not null default false;
+-- alter table service_entries add column if not exists cost numeric;
 -- create table if not exists service_entries (
 --   id uuid primary key default gen_random_uuid(),
 --   vehicle_id uuid not null references vehicles(id) on delete cascade,
