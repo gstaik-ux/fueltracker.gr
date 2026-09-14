@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "Carall",
-  description: "Fuel tracking, per vehicle",
+  description: "Το βιβλιάριο του οχήματός σας - καύσιμα, ΚΤΕΟ, ασφάλεια, διόδια, συνεργείο, στατιστικά. Όλα σε ένα μέρος.",
 };
 
 export const viewport = {

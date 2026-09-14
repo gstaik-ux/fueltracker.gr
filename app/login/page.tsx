@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Fuel } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,9 +37,9 @@ export default function LoginPage() {
         <div style={{ textAlign: "center", marginBottom: 22, position: "relative" }}>
           <span
             className="row-icon"
-            style={{ background: "rgba(255,255,255,0.12)", width: 48, height: 48, margin: "0 auto 14px", borderRadius: 14 }}
+            style={{ background: "rgba(255,255,255,0.9)", width: 56, height: 56, margin: "0 auto 14px", borderRadius: 14, padding: 8 }}
           >
-            <Fuel size={22} color="#ffffff" />
+            <img src="/logo.png" alt="Carall" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           </span>
           <div className="display" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: "#ffffff" }}>
             Carall
