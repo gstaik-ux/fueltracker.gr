@@ -35,12 +35,7 @@ export default function LoginPage() {
         style={{ "--accent": "#ffffff", position: "relative", maxWidth: 480, width: "100%", margin: "0 auto", padding: "0 18px" } as React.CSSProperties}
       >
         <div style={{ textAlign: "center", marginBottom: 22, position: "relative" }}>
-          <span
-            className="row-icon"
-            style={{ background: "rgba(255,255,255,0.1)", width: 56, height: 56, margin: "0 auto 14px", borderRadius: 14, padding: 10 }}
-          >
-            <img src="/logo.png" alt="Carall" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-          </span>
+          <img src="/logo.png" alt="Carall" style={{ width: 84, height: 84, margin: "0 auto 14px", display: "block" }} />
           <div className="display" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: "#ffffff" }}>
             Carall
           </div>
