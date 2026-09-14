@@ -31,7 +31,6 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: "100vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div className="login-bg" />
       <div
         className="animate-in"
         style={{ "--accent": "#ffffff", position: "relative", maxWidth: 480, width: "100%", margin: "0 auto", padding: "0 18px" } as React.CSSProperties}
@@ -44,7 +43,7 @@ export default function LoginPage() {
             <Fuel size={22} color="#ffffff" />
           </span>
           <div className="display" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: "#ffffff" }}>
-            Ημερολόγιο Καυσίμου
+            Carall
           </div>
           <div style={{ fontSize: 13, color: "var(--muted)" }}>Εισήγαγε τον κωδικό διαχειριστή</div>
         </div>

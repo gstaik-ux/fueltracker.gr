@@ -23,6 +23,7 @@ import {
   Utensils,
   Bell,
   Gauge,
+  Zap,
 } from "lucide-react";
 
 type Fillup = {
@@ -54,14 +55,15 @@ const SERVICE_TYPES = [
   { key: "wash", label: "Πλυντήριο", Icon: Sparkles },
   { key: "tolls", label: "Διόδια", Icon: Coins },
   { key: "food", label: "Φαγητό", Icon: Utensils },
+  { key: "upgrades", label: "Αναβαθμίσεις", Icon: Zap },
   { key: "other", label: "Άλλο", Icon: Wrench },
   { key: "general", label: "Σέρβις", Icon: Wrench },
 ];
 function serviceIcon(type: string) {
-  return (SERVICE_TYPES.find((t) => t.key === type) || SERVICE_TYPES[7]).Icon;
+  return (SERVICE_TYPES.find((t) => t.key === type) || SERVICE_TYPES[8]).Icon;
 }
 function serviceLabel(type: string) {
-  return (SERVICE_TYPES.find((t) => t.key === type) || SERVICE_TYPES[7]).label;
+  return (SERVICE_TYPES.find((t) => t.key === type) || SERVICE_TYPES[8]).label;
 }
 function serviceNotePlaceholder(type: string) {
   const examples: Record<string, string> = {
@@ -70,19 +72,20 @@ function serviceNotePlaceholder(type: string) {
     filter: "π.χ. φίλτρο αέρα + λαδιού",
     washer: "π.χ. καλοκαιρινό υγρό",
     wash: "π.χ. πλυντήριο Γιώργου",
-    other: "π.χ. τι έγινε",
-    general: "π.χ. τι έγινε",
+    upgrades: "π.χ. νέα εξάτμιση",
+    other: "π.χ. σύντομη περιγραφή",
+    general: "π.χ. σύντομη περιγραφή",
   };
   return examples[type] || "προαιρετικό";
 }
 // Vehicles with a small tank (scooters/mopeds) get everything done together
-// in one visit, so the picker only shows a single generic "Σέρβις" option.
-// Washing and trip expenses (tolls/food) are hidden here regardless - tolls
-// and food only ever get added through the Trip tab's quick-add, not this
-// general maintenance form.
+// in one visit, so the picker only shows a single generic "Σέρβις" option,
+// plus upgrades (a moto-specific category) and washing. Washing and trip
+// expenses (tolls/food) are hidden from the general car picker regardless -
+// tolls and food only ever get added through the Trip tab's quick-add.
 function availableServiceTypes(vehicleIcon: string) {
-  if (vehicleIcon === "bike") return SERVICE_TYPES.filter((t) => t.key === "general" || t.key === "wash");
-  return SERVICE_TYPES.filter((t) => t.key !== "general" && t.key !== "tolls" && t.key !== "food");
+  if (vehicleIcon === "bike") return SERVICE_TYPES.filter((t) => t.key === "general" || t.key === "wash" || t.key === "upgrades");
+  return SERVICE_TYPES.filter((t) => t.key !== "general" && t.key !== "tolls" && t.key !== "food" && t.key !== "upgrades");
 }
 
 const TRIP_EXPENSE_TYPES = [
@@ -280,10 +283,12 @@ export default function VehicleDashboard({
   vehicle: initialVehicle,
   initialFillups,
   initialServiceEntries,
+  initialTab = "main",
 }: {
   vehicle: Vehicle;
   initialFillups: Fillup[];
   initialServiceEntries: ServiceEntry[];
+  initialTab?: Tab;
 }) {
   const slug = initialVehicle.slug;
   const themeAccent = initialVehicle.themeAccent;
@@ -317,7 +322,7 @@ export default function VehicleDashboard({
   const [expenseCost, setExpenseCost] = useState("");
   const [expenseNote, setExpenseNote] = useState("");
 
-  const [viewMode, setViewMode] = useState<Tab>("main");
+  const [viewMode, setViewMode] = useState<Tab>(initialTab);
   const availableTypes = availableServiceTypes(vehicle.vehicleIcon);
   const [serviceForm, setServiceForm] = useState({ type: availableTypes[0].key, date: todayStr(), odometer: "", cost: "", note: "" });
   const [serviceError, setServiceError] = useState("");

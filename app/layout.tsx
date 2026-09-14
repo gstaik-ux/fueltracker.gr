@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Fuel Log",
+  title: "Carall",
   description: "Fuel tracking, per vehicle",
 };
 

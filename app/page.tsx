@@ -20,7 +20,7 @@ export default async function Home() {
     <div style={{ minHeight: "100vh" }}>
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "28px 18px 60px" }}>
         <div className="display" style={{ fontSize: 26, fontWeight: 700, letterSpacing: 0.2, marginBottom: 22, padding: "0 4px" }}>
-          Ημερολόγιο Καυσίμου
+          Carall
         </div>
 
         {vehicles.length === 0 && (
