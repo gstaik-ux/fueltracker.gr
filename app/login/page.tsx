@@ -37,7 +37,7 @@ export default function LoginPage() {
         <div style={{ textAlign: "center", marginBottom: 22, position: "relative" }}>
           <span
             className="row-icon"
-            style={{ background: "rgba(255,255,255,0.9)", width: 56, height: 56, margin: "0 auto 14px", borderRadius: 14, padding: 8 }}
+            style={{ background: "rgba(255,255,255,0.1)", width: 56, height: 56, margin: "0 auto 14px", borderRadius: 14, padding: 10 }}
           >
             <img src="/logo.png" alt="Carall" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           </span>

@@ -20,7 +20,7 @@ export default async function Home() {
     <div style={{ minHeight: "100vh" }}>
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "28px 18px 60px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, padding: "0 4px" }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.9)", display: "flex", alignItems: "center", justifyContent: "center", padding: 5, flexShrink: 0 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", padding: 6, flexShrink: 0 }}>
             <img src="/logo.png" alt="Carall" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           </span>
           <div className="display" style={{ fontSize: 26, fontWeight: 700, letterSpacing: 0.2 }}>
