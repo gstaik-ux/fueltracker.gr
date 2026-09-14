@@ -330,7 +330,7 @@ export default function VehicleDashboard({
   const [editServiceForm, setEditServiceForm] = useState({ date: "", odometer: "", cost: "", note: "" });
 
   const [showVehicleDetailsForm, setShowVehicleDetailsForm] = useState(false);
-  const [vehicleDetailsDraft, setVehicleDetailsDraft] = useState({ plate: "", vin: "" });
+  const [vehicleDetailsDraft, setVehicleDetailsDraft] = useState({ plate: "" });
 
   const [statsFilters, setStatsFilters] = useState({ fuel: true, service: false, trip: false });
 
@@ -766,10 +766,10 @@ export default function VehicleDashboard({
     const res = await fetch(`/api/v/${slug}/details`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plateNumber: vehicleDetailsDraft.plate.trim(), vin: vehicleDetailsDraft.vin.trim() }),
+      body: JSON.stringify({ plateNumber: vehicleDetailsDraft.plate.trim() }),
     });
     if (res.ok) {
-      setVehicle((v) => ({ ...v, plateNumber: vehicleDetailsDraft.plate.trim(), vin: vehicleDetailsDraft.vin.trim() }));
+      setVehicle((v) => ({ ...v, plateNumber: vehicleDetailsDraft.plate.trim() }));
       setShowVehicleDetailsForm(false);
       playSuccess();
     }
@@ -817,7 +817,18 @@ export default function VehicleDashboard({
   }
 
   return (
-    <div style={{ background: themeBg, color: "var(--text)", minHeight: "100vh", position: "relative" }}>
+    <div
+      style={{ background: themeBg, color: "var(--text)", minHeight: "100vh", position: "relative" }}
+      onTouchStart={(e) => onSwipeStart(e.touches[0].clientX, e.touches[0].clientY, swipeRef.current)}
+      onTouchEnd={(e) => {
+        const dx = e.changedTouches[0].clientX - swipeRef.current.x;
+        const dy = e.changedTouches[0].clientY - swipeRef.current.y;
+        if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+        const idx = TAB_ORDER.indexOf(viewMode);
+        if (dx < 0) goTab(idx + 1);
+        else goTab(idx - 1);
+      }}
+    >
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "28px 18px 100px", position: "relative", zIndex: 1, ["--accent" as any]: themeAccent }}>
         <div className="animate-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, padding: "0 4px", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -867,19 +878,7 @@ export default function VehicleDashboard({
           </div>
         </div>
 
-        <div
-          key={viewMode}
-          className="animate-fade"
-          onTouchStart={(e) => onSwipeStart(e.touches[0].clientX, e.touches[0].clientY, swipeRef.current)}
-          onTouchEnd={(e) => {
-            const dx = e.changedTouches[0].clientX - swipeRef.current.x;
-            const dy = e.changedTouches[0].clientY - swipeRef.current.y;
-            if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
-            const idx = TAB_ORDER.indexOf(viewMode);
-            if (dx < 0) goTab(idx + 1);
-            else goTab(idx - 1);
-          }}
-        >
+        <div key={viewMode} className="animate-fade">
           {viewMode === "fuel" && (
             <>
               {!loggedThisVisit && logStep === 1 && (
@@ -1395,32 +1394,27 @@ export default function VehicleDashboard({
               <div className="animate-in card" style={{ padding: "18px 18px 20px", marginBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                   <div className="display" style={{ fontSize: 15, fontWeight: 700 }}>Στοιχεία Οχήματος</div>
-                  {(vehicle.plateNumber || vehicle.vin) && !showVehicleDetailsForm && (
+                  {vehicle.plateNumber && !showVehicleDetailsForm && (
                     <button
-                      onClick={() => { setVehicleDetailsDraft({ plate: vehicle.plateNumber || "", vin: vehicle.vin || "" }); setShowVehicleDetailsForm(true); }}
+                      onClick={() => { setVehicleDetailsDraft({ plate: vehicle.plateNumber || "" }); setShowVehicleDetailsForm(true); }}
                       style={{ background: "none", border: "none", color: "var(--muted)", padding: 4 }}
                     >
                       <Pencil size={14} />
                     </button>
                   )}
                 </div>
-                {!(vehicle.plateNumber || vehicle.vin) || showVehicleDetailsForm ? (
+                {!vehicle.plateNumber || showVehicleDetailsForm ? (
                   <>
-                    <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>Αυτά δεν αλλάζουν συχνά - τα καταχωρείς μία φορά.</div>
-                    <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>Αυτό δεν αλλάζει συχνά - το καταχωρείς μία φορά.</div>
+                    <div style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>ΠΙΝΑΚΙΔΑ</div>
                       <input className="pill-input" placeholder="π.χ. ΙΖΗ-1234" value={vehicleDetailsDraft.plate} onChange={(e) => setVehicleDetailsDraft({ ...vehicleDetailsDraft, plate: e.target.value })} />
-                    </div>
-                    <div style={{ marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>VIN (αριθμός πλαισίου, προαιρετικό)</div>
-                      <input className="pill-input" placeholder="προαιρετικό" value={vehicleDetailsDraft.vin} onChange={(e) => setVehicleDetailsDraft({ ...vehicleDetailsDraft, vin: e.target.value })} />
                     </div>
                     <button className="tap" onClick={saveVehicleDetails} style={{ width: "100%", background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 14, fontWeight: 700, padding: "12px 0" }}>Αποθήκευση</button>
                   </>
                 ) : (
                   <div style={{ fontSize: 13.5, color: "var(--text)", lineHeight: 1.9 }}>
                     {vehicle.plateNumber && <div>Πινακίδα: <b>{vehicle.plateNumber}</b></div>}
-                    {vehicle.vin && <div>VIN: <b>{vehicle.vin}</b></div>}
                   </div>
                 )}
               </div>
@@ -1543,37 +1537,41 @@ export default function VehicleDashboard({
       </div>
 
       {vehicle && showNotifications && (
-        <div
-          ref={notificationDropdownRef}
-          className="animate-fade no-scrollbar"
-          style={{ position: "fixed", top: 74, right: 18, width: 260, maxHeight: 280, overflowY: "auto", padding: "8px 0", zIndex: 9999, background: "#131417", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.6)" }}
-        >
-          {reminderNotifications.length === 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "22px 16px" }}>
-              <span style={{ width: 30, height: 30, borderRadius: 99, background: "rgba(78,158,118,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Check size={15} color="#4e9e76" />
-              </span>
-              <div style={{ fontSize: 13, color: "var(--muted)" }}>Όλα καλά!</div>
-            </div>
-          ) : (
-            <>
-              <div style={{ padding: "6px 16px 10px", fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>
-                {reminderNotifications.length} {reminderNotifications.length === 1 ? "ειδοποίηση" : "ειδοποιήσεις"}
-              </div>
-              {reminderNotifications.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => { playTap(); setViewMode(n.tab); setShowNotifications(false); }}
-                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", textAlign: "left", padding: "10px 16px", borderTop: "1px solid var(--hairline)" }}
-                >
-                  <span style={{ width: 26, height: 26, borderRadius: 8, background: `${n.color}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <n.Icon size={13} color={n.color} />
+        <div style={{ position: "fixed", left: 0, right: 0, top: 74, display: "flex", justifyContent: "center", zIndex: 9999, pointerEvents: "none" }}>
+          <div style={{ maxWidth: 480, width: "100%", position: "relative", pointerEvents: "none" }}>
+            <div
+              ref={notificationDropdownRef}
+              className="animate-fade no-scrollbar"
+              style={{ position: "absolute", top: 0, right: 18, width: 260, maxHeight: 280, overflowY: "auto", padding: "8px 0", background: "#131417", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.6)", pointerEvents: "auto" }}
+            >
+              {reminderNotifications.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "22px 16px" }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 99, background: "rgba(78,158,118,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Check size={15} color="#4e9e76" />
                   </span>
-                  <div style={{ fontSize: 12.5, color: "var(--text)", lineHeight: 1.4 }}>{n.text}</div>
-                </button>
-              ))}
-            </>
-          )}
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>Όλα καλά!</div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ padding: "6px 16px 10px", fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>
+                    {reminderNotifications.length} {reminderNotifications.length === 1 ? "ειδοποίηση" : "ειδοποιήσεις"}
+                  </div>
+                  {reminderNotifications.map((n) => (
+                    <button
+                      key={n.id}
+                      onClick={() => { playTap(); setViewMode(n.tab); setShowNotifications(false); }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", textAlign: "left", padding: "10px 16px", borderTop: "1px solid var(--hairline)" }}
+                    >
+                      <span style={{ width: 26, height: 26, borderRadius: 8, background: `${n.color}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <n.Icon size={13} color={n.color} />
+                      </span>
+                      <div style={{ fontSize: 12.5, color: "var(--text)", lineHeight: 1.4 }}>{n.text}</div>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
