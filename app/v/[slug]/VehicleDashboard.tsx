@@ -8,6 +8,7 @@ import {
   Plus,
   Globe,
   Car,
+  Bike,
   Pencil,
   Fuel,
   Check,
@@ -421,7 +422,7 @@ export default function VehicleDashboard({
   const [soundMuted, setSoundMuted] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [settingsView, setSettingsView] = useState<string | null>(null);
-  const [myVehiclesList, setMyVehiclesList] = useState<{ slug: string; name: string }[]>([]);
+  const [myVehiclesList, setMyVehiclesList] = useState<{ slug: string; name: string; themeAccent: string; vehicleIcon: string }[]>([]);
   const [showAddVehicleForm, setShowAddVehicleForm] = useState(false);
   const [addVehicleInput, setAddVehicleInput] = useState("");
   const [addVehicleError, setAddVehicleError] = useState("");
@@ -469,7 +470,7 @@ export default function VehicleDashboard({
       setAddVehicleError("Το όχημα είναι ήδη στη λίστα σου.");
       return;
     }
-    const next = [...myVehiclesList, { slug: data.slug, name: data.name }];
+    const next = [...myVehiclesList, { slug: data.slug, name: data.name, themeAccent: data.themeAccent || "#e7a33e", vehicleIcon: data.vehicleIcon || "car" }];
     setMyVehiclesList(next);
     localStorage.setItem("carall_my_vehicles", JSON.stringify(next));
     setAddVehicleInput("");
@@ -1834,58 +1835,64 @@ export default function VehicleDashboard({
             <>
               {!settingsView ? (
                 <>
-                  {!showAddVehicleForm ? (
-                    <button
-                      onClick={() => { playTap(); setShowAddVehicleForm(true); }}
-                      className="animate-in tap"
-                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "16px 18px", marginBottom: 16, background: "rgba(255,255,255,0.045)", border: "none", borderRadius: 22, color: "var(--text)" }}
-                    >
-                      <span className="row-icon" style={{ background: `${themeAccent}22` }}><Plus size={16} color={themeAccent} /></span>
-                      <div className="display" style={{ fontSize: 15, fontWeight: 700, flex: 1, textAlign: "left" }}>Προσθήκη Οχήματος</div>
-                      <ChevronRight size={17} color="var(--muted)" />
-                    </button>
-                  ) : (
-                    <div className="animate-in card" style={{ padding: "16px 18px", marginBottom: 16 }}>
-                      <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
-                        Βάλε τον 6ψήφιο κωδικό οχήματος για να το προσθέσεις στη λίστα σου.
+                  <div className="animate-in card" style={{ padding: "4px 16px", marginBottom: 16 }}>
+                    {!showAddVehicleForm ? (
+                      <button
+                        onClick={() => { playTap(); setShowAddVehicleForm(true); }}
+                        className="tap"
+                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: myVehiclesList.length > 0 ? "1px solid var(--hairline)" : "none", color: "var(--text)", background: "none", border: "none", padding: "14px 0", fontSize: 14.5, fontWeight: 600 }}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <span className="row-icon" style={{ background: `${themeAccent}22` }}><Plus size={15} color={themeAccent} /></span>
+                          Προσθήκη Οχήματος
+                        </span>
+                        <ChevronRight size={16} color="var(--muted)" />
+                      </button>
+                    ) : (
+                      <div style={{ padding: "14px 0", borderBottom: myVehiclesList.length > 0 ? "1px solid var(--hairline)" : "none" }}>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
+                          Βάλε τον 6ψήφιο κωδικό οχήματος για να το προσθέσεις στη λίστα σου.
+                        </div>
+                        <input
+                          className="pill-input"
+                          placeholder="π.χ. 482917"
+                          value={addVehicleInput}
+                          onChange={(e) => { setAddVehicleInput(e.target.value); setAddVehicleError(""); }}
+                          style={{ marginBottom: 8 }}
+                        />
+                        {addVehicleError && <div style={{ fontSize: 12, color: "#e2323a", marginBottom: 8, textAlign: "center" }}>{addVehicleError}</div>}
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button
+                            onClick={addVehicleByCodeOrLink}
+                            disabled={addingVehicle || !/^\d{6}$/.test(addVehicleInput.trim())}
+                            className="tap"
+                            style={{ flex: 1, background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "11px 0", opacity: /^\d{6}$/.test(addVehicleInput.trim()) ? 1 : 0.4 }}
+                          >
+                            {addingVehicle ? "..." : "Προσθήκη"}
+                          </button>
+                          <button onClick={() => { setShowAddVehicleForm(false); setAddVehicleInput(""); setAddVehicleError(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 13, padding: "0 10px" }}>Άκυρο</button>
+                        </div>
                       </div>
-                      <input
-                        className="pill-input"
-                        placeholder="π.χ. 482917"
-                        value={addVehicleInput}
-                        onChange={(e) => { setAddVehicleInput(e.target.value); setAddVehicleError(""); }}
-                        style={{ marginBottom: 8 }}
-                      />
-                      {addVehicleError && <div style={{ fontSize: 12, color: "#e2323a", marginBottom: 8, textAlign: "center" }}>{addVehicleError}</div>}
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                          onClick={addVehicleByCodeOrLink}
-                          disabled={addingVehicle || !/^\d{6}$/.test(addVehicleInput.trim())}
-                          className="tap"
-                          style={{ flex: 1, background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "11px 0", opacity: /^\d{6}$/.test(addVehicleInput.trim()) ? 1 : 0.4 }}
-                        >
-                          {addingVehicle ? "..." : "Προσθήκη"}
-                        </button>
-                        <button onClick={() => { setShowAddVehicleForm(false); setAddVehicleInput(""); setAddVehicleError(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 13, padding: "0 10px" }}>Άκυρο</button>
-                      </div>
-                    </div>
-                  )}
+                    )}
 
-                  {myVehiclesList.length > 0 && (
-                    <div className="animate-in card" style={{ padding: "4px 16px", marginBottom: 16 }}>
-                      {myVehiclesList.map((v, i, arr) => (
+                    {myVehiclesList.map((v, i, arr) => {
+                      const VIcon = v.vehicleIcon === "bike" ? Bike : Car;
+                      return (
                         <a
                           key={v.slug}
                           href={`/v/${v.slug}`}
                           className="tap"
                           style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none", color: "var(--text)", textDecoration: "none", padding: "14px 0", fontSize: 14.5, fontWeight: 600 }}
                         >
-                          {v.name}
+                          <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <span className="row-icon" style={{ background: `${v.themeAccent}22` }}><VIcon size={15} color={v.themeAccent} /></span>
+                            {v.name}
+                          </span>
                           <ChevronRight size={16} color="var(--muted)" />
                         </a>
-                      ))}
-                    </div>
-                  )}
+                      );
+                    })}
+                  </div>
 
                   <button
                     onClick={playTap}
