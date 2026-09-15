@@ -27,6 +27,7 @@ import {
   Zap,
   Lock,
   Eye,
+  EyeOff,
   X,
 } from "lucide-react";
 
@@ -314,6 +315,14 @@ export default function VehicleDashboard({
   const [error, setError] = useState("");
   const [confirmGreeting, setConfirmGreeting] = useState(SEND_OFF_GREETINGS[0]);
   const [overCapacityConfirm, setOverCapacityConfirm] = useState<{ cost: number; liters: number } | null>(null);
+  // Shared banner for a background save that turned out to have failed -
+  // entries show as logged immediately, so this is how a genuine failure
+  // still gets surfaced instead of silently vanishing.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  function showSaveError(message: string) {
+    setSaveError(message);
+    setTimeout(() => setSaveError(null), 5000);
+  }
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ date: "", liters: "", cost: "", odometer: "", isTrip: false, isFull: false });
@@ -334,6 +343,12 @@ export default function VehicleDashboard({
   const [editServiceForm, setEditServiceForm] = useState({ date: "", odometer: "", cost: "", note: "" });
 
   const [showVehicleDetailsForm, setShowVehicleDetailsForm] = useState(false);
+  // Kept in memory only, for this one open page visit - never sent anywhere
+  // except fresh in each request when actually needed, and never persisted
+  // (no cookie, no storage). Purely so you don't have to retype the same
+  // password for the second document, or for uploading, within one visit.
+  // A page reload clears it, at which point the password is required again.
+  const [docsPassword, setDocsPassword] = useState<string | null>(null);
   const [vehicleDetailsDraft, setVehicleDetailsDraft] = useState({ plate: "" });
 
   const [statsFilters, setStatsFilters] = useState({ fuel: true, service: false, trip: false });
@@ -612,6 +627,34 @@ export default function VehicleDashboard({
       }
     }
 
+    // Show success right away and reset the form - the actual save happens
+    // in the background. If it turns out to have failed, the temporary
+    // entry below is quietly removed and the person is told, rather than
+    // silently losing what they just logged.
+    const tempId = `temp-${Date.now()}`;
+    const optimisticEntry: Fillup = {
+      id: tempId,
+      date: form.date,
+      liters,
+      cost,
+      odometer,
+      odometerEstimated,
+      isTrip: form.isTrip,
+      isFull: form.isFull,
+    };
+    setFillups((prev) => [...prev, optimisticEntry]);
+    if (odometer != null) setVehicle((v) => ({ ...v, lastOdometer: odometer! }));
+    setForm({ date: todayStr(), liters: "", cost: "", odometer: "", isTrip: false, isFull: false });
+    setLogStep(1);
+    setShowDateFields(false);
+    setManualPrice("");
+    setError("");
+    setOverCapacityConfirm(null);
+    setLoggedThisVisit(true);
+    setConfirmGreeting(SEND_OFF_GREETINGS[Math.floor(Math.random() * SEND_OFF_GREETINGS.length)]);
+    playSuccess();
+    setTimeout(() => setLoggedThisVisit(false), 20 * 60 * 1000);
+
     const res = await fetch(`/api/v/${slug}/fillups`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -620,20 +663,10 @@ export default function VehicleDashboard({
 
     if (res.ok) {
       const data = await res.json();
-      setFillups((prev) => [...prev, data.fillup]);
-      if (data.fillup.odometer != null) setVehicle((v) => ({ ...v, lastOdometer: data.fillup.odometer }));
-      setForm({ date: todayStr(), liters: "", cost: "", odometer: "", isTrip: false, isFull: false });
-      setLogStep(1);
-      setShowDateFields(false);
-      setManualPrice("");
-      setError("");
-      setOverCapacityConfirm(null);
-      setLoggedThisVisit(true);
-      setConfirmGreeting(SEND_OFF_GREETINGS[Math.floor(Math.random() * SEND_OFF_GREETINGS.length)]);
-      playSuccess();
-      setTimeout(() => setLoggedThisVisit(false), 20 * 60 * 1000);
+      setFillups((prev) => prev.map((f) => (f.id === tempId ? data.fillup : f)));
     } else {
-      setError("Κάτι πήγε στραβά - δοκίμασε ξανά.");
+      setFillups((prev) => prev.filter((f) => f.id !== tempId));
+      showSaveError("Η καταχώρηση καυσίμου δεν αποθηκεύτηκε - δοκίμασε ξανά.");
     }
   }
 
@@ -685,19 +718,33 @@ export default function VehicleDashboard({
     }
     const odometer = serviceForm.odometer.trim() === "" ? null : num(serviceForm.odometer);
     const cost = num(serviceForm.cost);
+
+    const tempId = `temp-${Date.now()}`;
+    const optimisticEntry: ServiceEntry = {
+      id: tempId,
+      type: serviceForm.type,
+      date: serviceForm.date,
+      odometer,
+      cost,
+      note: serviceForm.note.trim(),
+      isTrip: tripModeActive,
+    };
+    setServiceEntries((prev) => [...prev, optimisticEntry]);
+    setServiceForm({ type: availableTypes[0].key, date: todayStr(), odometer: "", cost: "", note: "" });
+    setServiceError("");
+    playSuccess();
+
     const res = await fetch(`/api/v/${slug}/service`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: serviceForm.type, date: serviceForm.date, odometer, cost, note: serviceForm.note.trim(), isTrip: false }),
+      body: JSON.stringify({ type: optimisticEntry.type, date: optimisticEntry.date, odometer, cost, note: optimisticEntry.note, isTrip: tripModeActive }),
     });
     if (res.ok) {
       const data = await res.json();
-      setServiceEntries((prev) => [...prev, data.entry]);
-      setServiceForm({ type: availableTypes[0].key, date: todayStr(), odometer: "", cost: "", note: "" });
-      setServiceError("");
-      playSuccess();
+      setServiceEntries((prev) => prev.map((s) => (s.id === tempId ? data.entry : s)));
     } else {
-      setServiceError("Κάτι πήγε στραβά - δοκίμασε ξανά.");
+      setServiceEntries((prev) => prev.filter((s) => s.id !== tempId));
+      showSaveError("Η καταχώρηση συντήρησης δεν αποθηκεύτηκε - δοκίμασε ξανά.");
     }
   }
   async function removeService(id: string) {
@@ -750,19 +797,36 @@ export default function VehicleDashboard({
 
   async function logTripExpense() {
     const cost = expenseCost.trim() === "" ? null : num(expenseCost);
+    const tempId = `temp-${Date.now()}`;
+    const optimisticEntry: ServiceEntry = {
+      id: tempId,
+      type: addingExpenseType!,
+      date: todayStr(),
+      odometer: null,
+      cost,
+      note: expenseNote.trim(),
+      isTrip: true,
+    };
+    setServiceEntries((prev) => [...prev, optimisticEntry]);
+    setTripSessionExpenses((prev) => [...prev, optimisticEntry]);
+    setAddingExpenseType(null);
+    setExpenseCost("");
+    setExpenseNote("");
+    playSuccess();
+
     const res = await fetch(`/api/v/${slug}/service`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: addingExpenseType, date: todayStr(), odometer: null, cost, note: expenseNote.trim(), isTrip: true }),
+      body: JSON.stringify({ type: optimisticEntry.type, date: optimisticEntry.date, odometer: null, cost, note: optimisticEntry.note, isTrip: true }),
     });
     if (res.ok) {
       const data = await res.json();
-      setServiceEntries((prev) => [...prev, data.entry]);
-      setTripSessionExpenses((prev) => [...prev, data.entry]);
-      setAddingExpenseType(null);
-      setExpenseCost("");
-      setExpenseNote("");
-      playSuccess();
+      setServiceEntries((prev) => prev.map((s) => (s.id === tempId ? data.entry : s)));
+      setTripSessionExpenses((prev) => prev.map((s) => (s.id === tempId ? data.entry : s)));
+    } else {
+      setServiceEntries((prev) => prev.filter((s) => s.id !== tempId));
+      setTripSessionExpenses((prev) => prev.filter((s) => s.id !== tempId));
+      showSaveError("Το έξοδο εκδρομής δεν αποθηκεύτηκε - δοκίμασε ξανά.");
     }
   }
 
@@ -788,18 +852,39 @@ export default function VehicleDashboard({
     });
   }
 
-  async function updateDocPhoto(field: "insurancePhotoUrl" | "kteoPhotoUrl", file: File): Promise<string | null> {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("field", field);
-    const res = await fetch(`/api/v/${slug}/photo`, { method: "POST", body: formData });
-    if (res.ok) {
-      const data = await res.json();
-      const flag = field === "insurancePhotoUrl" ? "hasInsurancePhoto" : "hasKteoPhoto";
-      setVehicle((v) => ({ ...v, [flag]: true }));
-      return data.url as string;
-    }
-    return null;
+  // fetch() has no way to report upload progress, so this uses
+  // XMLHttpRequest instead - the only way to get real byte-level progress
+  // for a file upload in the browser.
+  function updateDocPhoto(
+    field: "insurancePhotoUrl" | "kteoPhotoUrl",
+    file: File,
+    password: string,
+    onProgress: (pct: number) => void
+  ): Promise<{ url: string | null; error?: string }> {
+    return new Promise((resolve) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("field", field);
+      formData.append("password", password);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/v/${slug}/photo`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        const data = JSON.parse(xhr.responseText || "{}");
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const flag = field === "insurancePhotoUrl" ? "hasInsurancePhoto" : "hasKteoPhoto";
+          setVehicle((v) => ({ ...v, [flag]: true }));
+          resolve({ url: data.url as string });
+        } else {
+          resolve({ url: null, error: data.error || "Κάτι πήγε στραβά." });
+        }
+      };
+      xhr.onerror = () => resolve({ url: null, error: "Κάτι πήγε στραβά." });
+      xhr.send(formData);
+    });
   }
   async function removeDocPhoto(field: "insurancePhotoUrl" | "kteoPhotoUrl") {
     const flag = field === "insurancePhotoUrl" ? "hasInsurancePhoto" : "hasKteoPhoto";
@@ -885,6 +970,12 @@ export default function VehicleDashboard({
             </div>
           </div>
         </div>
+
+        {saveError && (
+          <div className="banner-fade" style={{ background: "rgba(226,50,58,0.15)", color: "#e2323a", borderRadius: 12, padding: "10px 14px", fontSize: 12.5, fontWeight: 600, textAlign: "center", marginBottom: 12 }}>
+            {saveError}
+          </div>
+        )}
 
         <div key={viewMode} className="animate-fade">
           {viewMode === "fuel" && (
@@ -1078,7 +1169,7 @@ export default function VehicleDashboard({
                 </div>
               </div>
 
-              {entries.length > 0 && (
+              {allHistory.length > 0 && (
                 <>
                   <div className="animate-in card" style={{ padding: "18px 20px 8px", marginBottom: 16 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -1427,10 +1518,10 @@ export default function VehicleDashboard({
                 )}
               </div>
 
-              <DocsPasswordCard slug={slug} hasPassword={vehicle.hasDocsPassword} accent={themeAccent} onSet={() => setVehicle((v) => ({ ...v, hasDocsPassword: true }))} />
+              <DocsPasswordCard slug={slug} hasPassword={vehicle.hasDocsPassword} accent={themeAccent} onSet={(pw) => { setVehicle((v) => ({ ...v, hasDocsPassword: true })); setDocsPassword(pw); }} />
 
-              <DocCard slug={slug} field="insurance" title="Ασφάλεια" Icon={FileText} dateVal={vehicle.insuranceDate} onChange={(v) => updateDocDate("insuranceDate", v)} hasPhoto={vehicle.hasInsurancePhoto} hasPassword={vehicle.hasDocsPassword} onPhoto={(f) => updateDocPhoto("insurancePhotoUrl", f)} onRemovePhoto={() => removeDocPhoto("insurancePhotoUrl")} onPasswordJustSet={() => setVehicle((v) => ({ ...v, hasDocsPassword: true }))} accent={themeAccent} />
-              <DocCard slug={slug} field="kteo" title="ΚΤΕΟ" Icon={FileText} dateVal={vehicle.kteoDate} onChange={(v) => updateDocDate("kteoDate", v)} hasPhoto={vehicle.hasKteoPhoto} hasPassword={vehicle.hasDocsPassword} onPhoto={(f) => updateDocPhoto("kteoPhotoUrl", f)} onRemovePhoto={() => removeDocPhoto("kteoPhotoUrl")} onPasswordJustSet={() => setVehicle((v) => ({ ...v, hasDocsPassword: true }))} accent={themeAccent} />
+              <DocCard slug={slug} field="insurance" title="Ασφάλεια" Icon={FileText} dateVal={vehicle.insuranceDate} onChange={(v) => updateDocDate("insuranceDate", v)} hasPhoto={vehicle.hasInsurancePhoto} hasPassword={vehicle.hasDocsPassword} onPhoto={(f, pw, onProgress) => updateDocPhoto("insurancePhotoUrl", f, pw, onProgress)} onRemovePhoto={() => removeDocPhoto("insurancePhotoUrl")} accent={themeAccent} sessionPassword={docsPassword} onPasswordVerified={setDocsPassword} />
+              <DocCard slug={slug} field="kteo" title="ΚΤΕΟ" Icon={FileText} dateVal={vehicle.kteoDate} onChange={(v) => updateDocDate("kteoDate", v)} hasPhoto={vehicle.hasKteoPhoto} hasPassword={vehicle.hasDocsPassword} onPhoto={(f, pw, onProgress) => updateDocPhoto("kteoPhotoUrl", f, pw, onProgress)} onRemovePhoto={() => removeDocPhoto("kteoPhotoUrl")} accent={themeAccent} sessionPassword={docsPassword} onPasswordVerified={setDocsPassword} />
             </>
           )}
 
@@ -1633,11 +1724,46 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
+// A password input with a peek toggle - used both for setting a document
+// password and for entering one to unlock.
+function PasswordField({
+  value, onChange, placeholder, onEnter, autoFocus,
+}: {
+  value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; onEnter?: () => void; autoFocus?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        className="pill-input"
+        type={show ? "text" : "password"}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        onKeyDown={(e) => { if (e.key === "Enter" && onEnter) onEnter(); }}
+        autoFocus={autoFocus}
+        style={{ textAlign: "center", paddingRight: 42 }}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        style={{ position: "absolute", right: 2, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--muted)", padding: 10, display: "flex", alignItems: "center", justifyContent: "center" }}
+      >
+        {show ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  );
+}
+
 function DocCard({
-  slug, field, title, Icon, dateVal, onChange, accent, hasPhoto, hasPassword, onPhoto, onRemovePhoto, onPasswordJustSet,
+  slug, field, title, Icon, dateVal, onChange, accent, hasPhoto, hasPassword, onPhoto, onRemovePhoto, sessionPassword, onPasswordVerified,
 }: {
   slug: string; field: "insurance" | "kteo"; title: string; Icon: any; dateVal: string | null; onChange: (v: string) => void; accent: string;
-  hasPhoto: boolean; hasPassword: boolean; onPhoto: (f: File) => Promise<string | null>; onRemovePhoto: () => void; onPasswordJustSet: () => void;
+  hasPhoto: boolean; hasPassword: boolean;
+  onPhoto: (f: File, password: string, onProgress: (pct: number) => void) => Promise<{ url: string | null; error?: string }>;
+  onRemovePhoto: () => void;
+  sessionPassword: string | null;
+  onPasswordVerified: (pw: string) => void;
 }) {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const days = daysUntil(dateVal);
@@ -1647,51 +1773,67 @@ function DocCard({
     statusText = days < 0 ? `Έληξε πριν από ${Math.abs(days)} ημέρες` : days <= 30 ? `Λήγει σε ${days} ημέρες` : `Ισχύει έως ${fmtDateGR(dateVal!)}`;
   }
 
-  // The actual file content is never part of the page load - it's fetched
-  // on demand from a route that checks this vehicle's specific ~1 year
-  // password-gated cookie. Once fetched this visit, it stays visible
-  // without asking again until the page reloads.
+  // Nothing about "unlocked" is remembered across page loads - this is all
+  // local, in-memory state for the current view only. The password is
+  // verified fresh with the server on every fetch/upload regardless of
+  // what's cached here; sessionPassword is purely a convenience so you're
+  // not retyping the same password for a second document in one visit.
   const [unlockedUrl, setUnlockedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [showViewer, setShowViewer] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const isPdf = unlockedUrl != null && unlockedUrl.startsWith("data:application/pdf");
 
-  async function fetchDocument() {
+  async function fetchWithPassword(password: string) {
     setLoading(true);
-    const res = await fetch(`/api/v/${slug}/document/${field}`);
+    const res = await fetch(`/api/v/${slug}/document/${field}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
     setLoading(false);
     if (res.ok) {
       const data = await res.json();
       setUnlockedUrl(data.url);
       setShowPasswordPrompt(false);
+      onPasswordVerified(password);
     } else {
       setShowPasswordPrompt(true);
+      if (sessionPassword) setPasswordError("Λάθος κωδικός."); // a remembered password stopped working (e.g. just rotated)
     }
   }
 
-  async function submitPassword() {
+  function requestView() {
+    if (sessionPassword) fetchWithPassword(sessionPassword);
+    else setShowPasswordPrompt(true);
+  }
+
+  function submitPassword() {
     setPasswordError("");
-    const res = await fetch(`/api/v/${slug}/docs-unlock`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: passwordInput }),
-    });
-    if (res.ok) {
-      setPasswordInput("");
-      await fetchDocument();
-    } else {
-      setPasswordError("Λάθος κωδικός.");
-    }
+    if (!passwordInput) return;
+    fetchWithPassword(passwordInput).then(() => setPasswordInput(""));
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    const url = await onPhoto(file);
-    if (url) setUnlockedUrl(url); // uploading unlocks viewing on this device too
+    const password = sessionPassword || passwordInput;
+    if (!password) return;
+    setUploadProgress(0);
+    const { url, error } = await onPhoto(file, password, setUploadProgress);
+    setUploadProgress(null);
+    if (url) {
+      setUnlockedUrl(url);
+      onPasswordVerified(password);
+      setShowPasswordPrompt(false);
+      setPasswordInput("");
+    } else {
+      setShowPasswordPrompt(true);
+      setPasswordError(error || "Κάτι πήγε στραβά.");
+    }
   }
 
   return (
@@ -1749,37 +1891,62 @@ function DocCard({
               <Lock size={18} color={accent} style={{ marginBottom: 8 }} />
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Προστατευμένο έγγραφο</div>
               <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginBottom: 12, lineHeight: 1.4 }}>
-                Χρειάζεται ο κωδικός που όρισες για να δεις και να κατεβάσεις αυτό το έγγραφο.
+                Χρειάζεται ο κωδικός για να δεις και να κατεβάσεις αυτό το έγγραφο.
               </div>
-              <input
-                className="pill-input"
-                type="password"
-                placeholder="Κωδικός"
-                value={passwordInput}
-                onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }}
-                onKeyDown={(e) => { if (e.key === "Enter") submitPassword(); }}
-                style={{ marginBottom: 8, textAlign: "center", width: "100%" }}
-              />
-              {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", marginBottom: 8 }}>{passwordError}</div>}
-              <button onClick={submitPassword} className="tap" style={{ width: "100%", background: accent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "10px 0" }}>
-                Ξεκλείδωμα
+              <PasswordField value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }} placeholder="Κωδικός" onEnter={submitPassword} autoFocus />
+              {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", margin: "8px 0" }}>{passwordError}</div>}
+              <button onClick={submitPassword} disabled={loading} className="tap" style={{ width: "100%", background: accent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "10px 0", marginTop: passwordError ? 0 : 8 }}>
+                {loading ? "..." : "Ξεκλείδωμα"}
               </button>
             </div>
           </div>
         ) : (
           <button
-            onClick={fetchDocument}
+            onClick={requestView}
             disabled={loading}
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: `${accent}22`, border: "none", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 700, color: accent }}
           >
-            <Lock size={13} /> {loading ? "..." : "Προβολή εγγράφου"}
+            <Eye size={13} /> {loading ? "..." : "Προβολή εγγράφου"}
           </button>
         )
+      ) : uploadProgress != null ? (
+        <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>Μεταφόρτωση...</div>
+            <div style={{ fontSize: 12, color: accent, fontWeight: 700 }}>{uploadProgress}%</div>
+          </div>
+          <div style={{ height: 6, borderRadius: 99, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${uploadProgress}%`, background: accent, borderRadius: 99, transition: "width 0.2s ease" }} />
+          </div>
+        </div>
+      ) : !hasPassword ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "12px 14px", fontSize: 11.5, color: "var(--muted)", opacity: 0.7, textAlign: "center", lineHeight: 1.4 }}>
+          Όρισε πρώτα κωδικό εγγράφων παραπάνω για να ανεβάσεις αρχείο.
+        </div>
+      ) : sessionPassword || showPasswordPrompt ? (
+        <>
+          {showPasswordPrompt && !sessionPassword && (
+            <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px", marginBottom: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <Lock size={18} color={accent} style={{ marginBottom: 8 }} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Κωδικός για ανέβασμα</div>
+                <PasswordField value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }} placeholder="Κωδικός" autoFocus />
+                {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", margin: "8px 0" }}>{passwordError}</div>}
+              </div>
+            </div>
+          )}
+          <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)", cursor: (sessionPassword || passwordInput) ? "pointer" : "default", opacity: (sessionPassword || passwordInput) ? 1 : 0.5 }}>
+            <Camera size={15} /> Προσθήκη εγγράφου
+            <input type="file" accept="image/*,application/pdf" onChange={handleFile} disabled={!sessionPassword && !passwordInput} style={{ display: "none" }} />
+          </label>
+        </>
       ) : (
-        <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)", cursor: "pointer" }}>
-          <Camera size={15} /> Προσθήκη εγγράφου
-          <input type="file" accept="image/*,application/pdf" onChange={handleFile} style={{ display: "none" }} />
-        </label>
+        <button
+          onClick={() => setShowPasswordPrompt(true)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}
+        >
+          <Lock size={13} /> Προσθήκη εγγράφου
+        </button>
       )}
     </div>
 
@@ -1805,9 +1972,10 @@ function DocCard({
   );
 }
 
-function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; hasPassword: boolean; accent: string; onSet: () => void }) {
+function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; hasPassword: boolean; accent: string; onSet: (password: string) => void }) {
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState("");
+  const [resetMonths, setResetMonths] = useState(6);
   const [error, setError] = useState("");
 
   async function save() {
@@ -1815,12 +1983,12 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
     const res = await fetch(`/api/v/${slug}/docs-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: draft }),
+      body: JSON.stringify({ password: draft, resetMonths }),
     });
     if (res.ok) {
+      onSet(draft);
       setDraft("");
       setShowForm(false);
-      onSet();
     } else {
       const data = await res.json().catch(() => ({}));
       setError(data.error || "Κάτι πήγε στραβά.");
@@ -1828,7 +1996,8 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
   }
 
   // Once a password exists, this card disappears from the app entirely -
-  // there's no edit path, by design (see the docs-password route).
+  // there's no edit path, by design (see the docs-password route). It only
+  // comes back on its own once the rotation schedule clears it.
   if (hasPassword) return null;
 
   return (
@@ -1840,16 +2009,33 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
 
       {showForm ? (
         <>
-          <input
-            className="pill-input"
-            type="password"
-            placeholder="Όρισε κωδικό"
-            value={draft}
-            onChange={(e) => { setDraft(e.target.value); setError(""); }}
-            style={{ marginBottom: 10, textAlign: "center" }}
-          />
+          <PasswordField value={draft} onChange={(e) => { setDraft(e.target.value); setError(""); }} placeholder="Όρισε κωδικό" onEnter={save} autoFocus />
+          <div style={{ fontSize: 10.5, color: "var(--muted)", opacity: 0.7, margin: "10px 0", textAlign: "center" }}>
+            Θα χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα - δεν αποθηκεύεται πουθενά, ούτε σε αυτή τη συσκευή.
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>Αυτόματη επαναφορά μετά από:</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            {[3, 6, 9].map((m) => (
+              <button
+                key={m}
+                onClick={() => setResetMonths(m)}
+                style={{
+                  flex: 1,
+                  background: resetMonths === m ? `${accent}33` : "rgba(255,255,255,0.06)",
+                  border: "none",
+                  borderRadius: 999,
+                  padding: "9px 0",
+                  color: resetMonths === m ? accent : "var(--muted)",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                }}
+              >
+                {m} μήνες
+              </button>
+            ))}
+          </div>
           <div style={{ fontSize: 10.5, color: "var(--muted)", opacity: 0.7, marginBottom: 10, textAlign: "center" }}>
-            Ορίζεται μία φορά και δεν αλλάζει ξανά από εδώ - κράτησέ τον κάπου ασφαλές.
+            Μετά από {resetMonths} μήνες ο κωδικός διαγράφεται αυτόματα και εμφανίζεται ξανά αυτή η κάρτα - είτε τον ξέχασες, είτε θες απλά να τον αλλάξεις.
           </div>
           {error && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", marginBottom: 8 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
@@ -1864,7 +2050,7 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
       ) : (
         <>
           <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
-            Χωρίς κωδικό, όποιος ανοίξει τον σύνδεσμο του οχήματος μπορεί να δει τα έγγραφα. Πρόσθεσε έναν κωδικό μόνο για αυτό το όχημα.
+            Χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα εγγράφου σε αυτό το όχημα - χωρίς εξαιρέσεις, χωρίς να θυμάται τη συσκευή.
           </div>
           <button className="tap" onClick={() => setShowForm(true)} style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 999, color: "var(--text)", fontSize: 13.5, fontWeight: 600, padding: "11px 0" }}>
             Ορισμός κωδικού

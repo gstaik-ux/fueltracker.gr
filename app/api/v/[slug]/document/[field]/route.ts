@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { query } from "@/lib/db";
-import { isDocsUnlocked } from "@/lib/session";
+import { getEffectiveDocsPassword } from "@/lib/docsPassword";
 
 const COLUMN_MAP: Record<string, string> = {
   insurance: "insurance_photo_url",
@@ -8,13 +9,17 @@ const COLUMN_MAP: Record<string, string> = {
 };
 
 // The actual document content only ever leaves the server through this
-// route, and only once that specific vehicle's docs cookie checks out -
-// the initial page load never includes it, so there's nothing to find in
-// page source or dev tools without unlocking first.
-export async function GET(req: NextRequest, { params }: { params: { slug: string; field: string } }) {
-  if (!(await isDocsUnlocked(params.slug))) {
-    return NextResponse.json({ error: "Locked" }, { status: 401 });
+// route, and only with the correct password included in THIS request -
+// there's no cookie or session to fall back on, so it's verified fresh
+// every single time, by design.
+export async function POST(req: NextRequest, { params }: { params: { slug: string; field: string } }) {
+  const { password } = await req.json();
+  const { hash } = await getEffectiveDocsPassword(params.slug);
+
+  if (!hash || !password || !(await bcrypt.compare(password, hash))) {
+    return NextResponse.json({ error: "Λάθος κωδικός." }, { status: 401 });
   }
+
   const column = COLUMN_MAP[params.field];
   if (!column) return NextResponse.json({ error: "Unknown field" }, { status: 400 });
 

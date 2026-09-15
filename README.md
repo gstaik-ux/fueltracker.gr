@@ -31,35 +31,36 @@ service entries.
 
 ## Document privacy
 
-Insurance/ΚΤΕΟ **photos and PDFs** are gated behind a password - but a
+Insurance/ΚΤΕΟ **photos and PDFs** are gated behind a password - a
 **separate password per vehicle**, set once by whoever manages that
 vehicle, not shared with the admin login and not reusable across vehicles.
 
-- The password is **hashed with bcrypt** before it touches the database -
-  never stored in plain text.
-- It can only be **set once**. Once a vehicle has a password, the "set
-  password" card disappears from the app entirely - there's no edit or
-  change path anywhere in the UI, and the API route itself refuses a
-  second attempt even if called directly. If a family genuinely forgets
-  their vehicle's password, the only way to reset it is running this in
-  Supabase's SQL Editor for that one vehicle:
-  `update vehicles set docs_password_hash = null where slug = 'yourslug';`
-  (that just clears it so the "set password" card reappears - it doesn't
-  reveal the old one, since it's hashed).
-- Unlocking sets a cookie **scoped to that one vehicle's slug** - a cookie
-  from one vehicle's unlock can't be reused to unlock a different vehicle.
-- That cookie lasts about a **year**, meant to be entered once per device
-  and then forgotten about.
-- Uploading a document automatically unlocks viewing on that same device
-  too, so whoever adds a file isn't immediately asked for the password to
-  see what they just uploaded.
+- **No session, no cookie, ever.** The password is required fresh for
+  every single view, download, or upload - there's no "remember this
+  device" convenience at all. Each request is verified independently
+  against the database.
+- The password is **hashed with bcrypt** - never stored in plain text.
+- **Automatic rotation, not a fixed lifetime.** Whoever sets the password
+  also picks 3, 6, or 9 months. Once that many months pass since it was
+  set, the password is automatically cleared - lazily, the next time
+  anything checks it, no cron job needed - and the "set password" card
+  reappears so a new one can be chosen. This covers both a forgotten
+  password and a family that just wants to rotate it periodically.
+- It can only be **set once** while active - there's no edit path in the
+  UI, and the API route itself refuses a second attempt even if called
+  directly, for as long as a password is currently set. If it truly needs
+  clearing before its scheduled rotation, run this in Supabase's SQL
+  Editor for that one vehicle:
+  `update vehicles set docs_password_hash = null, docs_reset_months = null, docs_password_set_at = null where slug = 'yourslug';`
+- Uploading a document still requires the password in that same request -
+  it's checked in the same photo-upload endpoint, not bypassed.
 - Everything else on a vehicle's page (dates, fuel log, service history)
   stays exactly as open as before - only the actual uploaded file content
   requires this.
 - The document content itself is never included in the page's initial
-  load - it's fetched separately through a route that checks the cookie
-  server-side first, so there's nothing to find in page source or dev
-  tools without unlocking.
+  load - it's only ever returned by a route that takes the password
+  directly in that request and verifies it before responding, so there's
+  nothing to find in page source or dev tools without it.
 
 ## 2. Environment variables
 
