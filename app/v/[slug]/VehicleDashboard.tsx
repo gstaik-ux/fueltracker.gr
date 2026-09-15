@@ -13,8 +13,6 @@ import {
   Droplets,
   Wrench,
   Filter,
-  Car,
-  Bike,
   FileText,
   Download,
   Sparkles,
@@ -160,17 +158,36 @@ function daysUntil(dateStr: string | null) {
   now.setHours(0, 0, 0, 0);
   return Math.round((target.getTime() - now.getTime()) / 86400000);
 }
+// A gradient from green (60+ days away, just a heads-up) through to red
+// (7 days or less, or already expired) - matching the same 5 checkpoints
+// the reminder notifications use: 60, 45, 30, 15, 7 days.
+// A greeting matched to the time of day it's actually opened - five bands
+// instead of a plain morning/evening split, with a neutral "Καλώς ορίσατε"
+// for the overnight hours instead of an awkward "good evening"/"good
+// morning" at 2am.
+function getTimeGreeting(): string {
+  // A small chance of a neutral welcome instead of the usual time-based
+  // greeting - can show up regardless of what time it actually is.
+  if (Math.random() < 0.15) return "Καλώς ορίσατε";
+
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return "Καλημέρα";
+  if (hour < 16) return "Καλό μεσημέρι";
+  if (hour < 19) return "Καλό απόγευμα";
+  return "Καλησπέρα"; // covers evening and overnight (19:00-04:59)
+}
+
 function docStatusColor(days: number | null) {
   if (days == null) return "#868d99";
-  if (days < 0 || days <= 15) return "#e2323a";
-  if (days <= 30) return "#e0b23e";
-  return "#4e9e76";
+  if (days < 0 || days <= 7) return "#e2323a"; // red - urgent
+  if (days <= 15) return "#e0653e"; // orange-red
+  if (days <= 30) return "#e0b23e"; // amber
+  if (days <= 45) return "#c9c23e"; // yellow-green
+  if (days <= 60) return "#8fbf5a"; // light green
+  return "#4e9e76"; // green
 }
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-function vehicleIconFor(icon: string) {
-  return icon === "bike" ? Bike : Car;
 }
 
 function useSound() {
@@ -216,7 +233,9 @@ function useSound() {
 }
 
 // Swipe a row left to reveal a delete action underneath - tap it to confirm.
-function SwipeToDelete({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
+// Swipe a row left to reveal delete, or right to reveal edit - replaces the
+// old separate pencil-icon button entirely.
+function SwipeToDelete({ children, onDelete, onEdit }: { children: React.ReactNode; onDelete: () => void; onEdit?: () => void }) {
   const [dragX, setDragX] = useState(0);
   const draggingRef = useRef(false);
   const startXRef = useRef(0);
@@ -231,12 +250,17 @@ function SwipeToDelete({ children, onDelete }: { children: React.ReactNode; onDe
   function move(clientX: number) {
     if (!draggingRef.current) return;
     const next = startDragXRef.current + (clientX - startXRef.current);
-    setDragX(Math.min(0, Math.max(next, -REVEAL)));
+    const min = onEdit ? -REVEAL : 0;
+    setDragX(Math.min(REVEAL, Math.max(next, min)));
   }
   function end() {
     if (!draggingRef.current) return;
     draggingRef.current = false;
-    setDragX((x) => (x < -REVEAL / 2 ? -REVEAL : 0));
+    setDragX((x) => {
+      if (x < -REVEAL / 2) return -REVEAL;
+      if (onEdit && x > REVEAL / 2) return REVEAL;
+      return 0;
+    });
   }
 
   return (
@@ -256,6 +280,14 @@ function SwipeToDelete({ children, onDelete }: { children: React.ReactNode; onDe
           touchAction: "pan-y",
         }}
       >
+        {onEdit && (
+          <button
+            onClick={() => { onEdit(); setDragX(0); }}
+            style={{ width: REVEAL, flexShrink: 0, marginLeft: -REVEAL, background: "rgba(255,255,255,0.1)", border: "none", color: "var(--text)", fontSize: 11.5, fontWeight: 700 }}
+          >
+            Επεξεργασία
+          </button>
+        )}
         <div style={{ width: "100%", flexShrink: 0 }}>{children}</div>
         <button
           onClick={() => { onDelete(); setDragX(0); }}
@@ -301,6 +333,8 @@ export default function VehicleDashboard({
 
   const dateInputRef = useRef<HTMLInputElement>(null);
   const serviceDateInputRef = useRef<HTMLInputElement>(null);
+  const editFormDateInputRef = useRef<HTMLInputElement>(null);
+  const editServiceFormDateInputRef = useRef<HTMLInputElement>(null);
   const { playTap, playSuccess } = useSound();
 
   const [vehicle, setVehicle] = useState<Vehicle>(initialVehicle);
@@ -355,12 +389,16 @@ export default function VehicleDashboard({
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const [headerText, setHeaderText] = useState<string | null>(null);
-  const pendingGreetingRef = useRef<string | null>(
-    (() => {
-      const hour = new Date().getHours();
-      return hour < 12 ? "Καλημέρα" : "Καλησπέρα";
-    })()
-  );
+  const pendingGreetingRef = useRef<string | null>(null);
+
+  // Computing this inside useEffect (not a useRef lazy initializer) means
+  // it's guaranteed to run client-side only - a lazy initializer can
+  // execute during server-side rendering, which would use Vercel's server
+  // timezone (likely UTC) instead of the actual visitor's local time. This
+  // way it's always genuine local time for whoever opened the page.
+  useEffect(() => {
+    pendingGreetingRef.current = getTimeGreeting();
+  }, []);
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(new Set());
@@ -369,7 +407,8 @@ export default function VehicleDashboard({
 
   // Whenever the tab changes, briefly show that section's name in place of
   // the vehicle name, then settle back. On first mount this shows the
-  // time-of-day greeting instead (queued by the ref above).
+  // time-of-day greeting instead (queued by the effect above - which,
+  // since it's declared first, always runs before this one on mount).
   useEffect(() => {
     const title = pendingGreetingRef.current || TAB_TITLES[viewMode] || null;
     pendingGreetingRef.current = null;
@@ -488,7 +527,7 @@ export default function VehicleDashboard({
       });
     }
     const insDays = daysUntil(vehicle.insuranceDate);
-    if (insDays != null && insDays <= 30) {
+    if (insDays != null && insDays <= 60) {
       list.push({
         id: "insurance",
         color: docStatusColor(insDays),
@@ -498,7 +537,7 @@ export default function VehicleDashboard({
       });
     }
     const kteoDays = daysUntil(vehicle.kteoDate);
-    if (kteoDays != null && kteoDays <= 30) {
+    if (kteoDays != null && kteoDays <= 60) {
       list.push({
         id: "kteo",
         color: docStatusColor(kteoDays),
@@ -582,11 +621,17 @@ export default function VehicleDashboard({
     return [...fuelItems, ...serviceItems].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }, [entries, serviceEntries]);
 
-  const lifetimeTotal = useMemo(() => {
-    const fuelTotal = entries.reduce((s, e) => s + e.cost, 0);
-    const serviceTotal = serviceEntries.reduce((s, e) => s + (e.cost || 0), 0);
-    return fuelTotal + serviceTotal;
-  }, [entries, serviceEntries]);
+  // The visible history list matches whichever year is selected up top -
+  // allHistory itself stays unfiltered so the chart/history section still
+  // renders (with an empty state) even when the selected year has nothing.
+  const yearHistory = useMemo(
+    () => allHistory.filter((item) => new Date(item.date + "T00:00:00").getFullYear() === selectedYear),
+    [allHistory, selectedYear]
+  );
+  const yearHistoryTotal = useMemo(
+    () => yearHistory.reduce((s, item) => s + (item.kind === "fuel" ? item.cost : item.cost || 0), 0),
+    [yearHistory]
+  );
 
   const repairHistory = useMemo(
     () => [...serviceEntries].filter((s) => s.type !== "tolls" && s.type !== "food").sort((a, b) => (a.date < b.date ? 1 : -1)),
@@ -914,8 +959,6 @@ export default function VehicleDashboard({
     });
   }
 
-  const VehicleIcon = vehicleIconFor(vehicle.vehicleIcon);
-
   function onSwipeStart(x: number, y: number, ref: { x: number; y: number }) {
     ref.x = x;
     ref.y = y;
@@ -945,7 +988,7 @@ export default function VehicleDashboard({
         <div className="animate-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, padding: "0 4px", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="row-icon" style={{ background: `${themeAccent}22` }}>
-              <VehicleIcon size={17} color={themeAccent} />
+              <img src="/logo.png" alt="Carall" style={{ width: 17, height: 17, objectFit: "contain" }} />
             </span>
             <div key={headerText || "name"} className="display animate-fade" style={{ fontSize: 17, fontWeight: 700 }}>
               {headerText || vehicle.name}
@@ -1002,11 +1045,9 @@ export default function VehicleDashboard({
               {!loggedThisVisit && logStep === 1 && (
                 <div className="animate-in" style={{ ...({} as any), background: "rgba(255,255,255,0.045)", borderRadius: 22, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 6px 20px rgba(0,0,0,0.25)", padding: "28px 20px 22px" }}>
                   <div style={{ textAlign: "center", fontSize: 12, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginBottom: 2 }}>Κόστος €</div>
-                  <input
+                  <CostInput
                     className="big-input"
-                    type="text"
-                    inputMode="decimal"
-                    pattern="[0-9]*[.,]?[0-9]*"
+                    big
                     placeholder="0€"
                     autoFocus
                     value={form.cost}
@@ -1254,11 +1295,14 @@ export default function VehicleDashboard({
 
                   <div className="animate-in card" style={{ padding: "6px 16px" }}>
                     <div style={{ padding: "14px 4px 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <SectionLabel style={{ marginBottom: 0 }}>Ιστορικό (όλα)</SectionLabel>
-                      <div className="display" style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>Σύνολο: {fmtMoney(lifetimeTotal)}</div>
+                      <SectionLabel style={{ marginBottom: 0 }}>Ιστορικό {selectedYear}</SectionLabel>
+                      <div className="display" style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>Σύνολο: {fmtMoney(yearHistoryTotal)}</div>
                     </div>
-                    {allHistory.map((e: any, i) => {
-                      const borderBottom = i < allHistory.length - 1 ? "1px solid var(--hairline)" : "none";
+                    {yearHistory.length === 0 && (
+                      <div style={{ padding: "8px 4px 16px", fontSize: 13, color: "var(--muted)" }}>Καμία καταχώρηση για το {selectedYear}.</div>
+                    )}
+                    {yearHistory.map((e: any, i) => {
+                      const borderBottom = i < yearHistory.length - 1 ? "1px solid var(--hairline)" : "none";
 
                       if (e.kind === "service") {
                         const Icon = serviceIcon(e.type);
@@ -1268,7 +1312,10 @@ export default function VehicleDashboard({
                               <div className="fillup-row" style={{ marginBottom: 8 }}>
                                 <div style={{ flex: 1 }}>
                                   <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΗΜΕΡΟΜΗΝΙΑ</div>
-                                  <input className="pill-input" type="date" style={{ fontSize: 14 }} value={editServiceForm.date} onChange={(ev) => setEditServiceForm({ ...editServiceForm, date: ev.target.value })} />
+                                  <div onClick={() => (editServiceFormDateInputRef.current?.showPicker ? editServiceFormDateInputRef.current.showPicker() : editServiceFormDateInputRef.current?.focus())} style={{ position: "relative" }}>
+                                    <div className="pill-input" style={{ cursor: "pointer", fontSize: 14 }}>{fmtDateGR(editServiceForm.date)}</div>
+                                    <input ref={editServiceFormDateInputRef} type="date" value={editServiceForm.date} onChange={(ev) => setEditServiceForm({ ...editServiceForm, date: ev.target.value })} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", border: "none" }} />
+                                  </div>
                                 </div>
                                 <div style={{ flex: 1 }}>
                                   <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΧΙΛΙΟΜΕΤΡΑ</div>
@@ -1293,7 +1340,7 @@ export default function VehicleDashboard({
                           );
                         }
                         return (
-                          <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)}>
+                          <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)}>
                             <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                                 <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Icon size={15} color={themeAccent} /></span>
@@ -1313,10 +1360,7 @@ export default function VehicleDashboard({
                                   </div>
                                 </div>
                               </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                                {e.cost != null && <div className="display" style={{ fontSize: 14.5, fontWeight: 700, marginRight: 2 }}>{fmtCost(e.cost)}</div>}
-                                <button className="icon-btn tap" onClick={() => startEditService(e)}><Pencil size={14} /></button>
-                              </div>
+                              {e.cost != null && <div className="display" style={{ fontSize: 16.5, fontWeight: 700, flexShrink: 0 }}>{fmtCost(e.cost)}</div>}
                             </div>
                           </SwipeToDelete>
                         );
@@ -1328,7 +1372,10 @@ export default function VehicleDashboard({
                             <div className="fillup-row" style={{ marginBottom: 8 }}>
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΗΜΕΡΟΜΗΝΙΑ</div>
-                                <input className="pill-input" type="date" style={{ fontSize: 14 }} value={editForm.date} onChange={(ev) => setEditForm({ ...editForm, date: ev.target.value })} />
+                                <div onClick={() => (editFormDateInputRef.current?.showPicker ? editFormDateInputRef.current.showPicker() : editFormDateInputRef.current?.focus())} style={{ position: "relative" }}>
+                                  <div className="pill-input" style={{ cursor: "pointer", fontSize: 14 }}>{fmtDateGR(editForm.date)}</div>
+                                  <input ref={editFormDateInputRef} type="date" value={editForm.date} onChange={(ev) => setEditForm({ ...editForm, date: ev.target.value })} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", border: "none" }} />
+                                </div>
                               </div>
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΧΙΛΙΟΜΕΤΡΑ</div>
@@ -1368,7 +1415,7 @@ export default function VehicleDashboard({
                       }
 
                       return (
-                        <SwipeToDelete key={e.id} onDelete={() => removeEntry(e.id)}>
+                        <SwipeToDelete key={e.id} onDelete={() => removeEntry(e.id)} onEdit={() => startEdit(e)}>
                           <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                               <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Fuel size={15} color={themeAccent} /></span>
@@ -1393,16 +1440,13 @@ export default function VehicleDashboard({
                                 </div>
                               </div>
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                              <div className="display" style={{ fontSize: 14.5, fontWeight: 700, marginRight: 2 }}>{fmtMoney(e.cost)}</div>
-                              <button className="icon-btn tap" onClick={() => startEdit(e)}><Pencil size={14} /></button>
-                            </div>
+                            <div className="display" style={{ fontSize: 16.5, fontWeight: 700, flexShrink: 0 }}>{fmtMoney(e.cost)}</div>
                           </div>
                         </SwipeToDelete>
                       );
                     })}
                   </div>
-                  {entries.some((e) => e.odometerEstimated) && (
+                  {yearHistory.some((e: any) => e.kind === "fuel" && e.odometerEstimated) && (
                     <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginTop: 10, padding: "0 4px" }}>
                       * εκτιμώμενα χιλιόμετρα βάσει της γνωστής κατανάλωσης του οχήματος
                     </div>
@@ -1441,16 +1485,15 @@ export default function VehicleDashboard({
                 </div>
 
                 <div style={{ textAlign: "center", fontSize: 12, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginBottom: 2 }}>ΚΟΣΤΟΣ €</div>
-                <input
-                  className="big-input"
-                  type="text"
-                  inputMode="decimal"
-                  pattern="[0-9]*[.,]?[0-9]*"
-                  placeholder="0€"
-                  value={serviceForm.cost}
-                  onChange={(e) => setServiceForm({ ...serviceForm, cost: e.target.value })}
-                  style={{ marginBottom: 14 }}
-                />
+                <div style={{ marginBottom: 14 }}>
+                  <CostInput
+                    className="big-input"
+                    big
+                    placeholder="0€"
+                    value={serviceForm.cost}
+                    onChange={(e) => setServiceForm({ ...serviceForm, cost: e.target.value })}
+                  />
+                </div>
 
                 <div className="fillup-row" style={{ marginBottom: 10 }}>
                   <div style={{ flex: 1 }}>
@@ -1494,7 +1537,10 @@ export default function VehicleDashboard({
                         <div className="fillup-row" style={{ marginBottom: 8 }}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΗΜΕΡΟΜΗΝΙΑ</div>
-                            <input className="pill-input" type="date" style={{ fontSize: 14 }} value={editServiceForm.date} onChange={(ev) => setEditServiceForm({ ...editServiceForm, date: ev.target.value })} />
+                            <div onClick={() => (editServiceFormDateInputRef.current?.showPicker ? editServiceFormDateInputRef.current.showPicker() : editServiceFormDateInputRef.current?.focus())} style={{ position: "relative" }}>
+                                    <div className="pill-input" style={{ cursor: "pointer", fontSize: 14 }}>{fmtDateGR(editServiceForm.date)}</div>
+                                    <input ref={editServiceFormDateInputRef} type="date" value={editServiceForm.date} onChange={(ev) => setEditServiceForm({ ...editServiceForm, date: ev.target.value })} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", border: "none" }} />
+                                  </div>
                           </div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4 }}>ΧΙΛΙΟΜΕΤΡΑ</div>
@@ -1519,7 +1565,7 @@ export default function VehicleDashboard({
                     );
                   }
                   return (
-                    <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)}>
+                    <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)}>
                       <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                           <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Icon size={15} color={themeAccent} /></span>
@@ -1532,10 +1578,7 @@ export default function VehicleDashboard({
                             </div>
                           </div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                          {e.cost != null && <div className="display" style={{ fontSize: 14.5, fontWeight: 700, marginRight: 2 }}>{fmtCost(e.cost)}</div>}
-                          <button className="icon-btn tap" onClick={() => startEditService(e)}><Pencil size={14} /></button>
-                        </div>
+                        {e.cost != null && <div className="display" style={{ fontSize: 16.5, fontWeight: 700, flexShrink: 0 }}>{fmtCost(e.cost)}</div>}
                       </div>
                     </SwipeToDelete>
                   );
@@ -1625,7 +1668,7 @@ export default function VehicleDashboard({
                     {addingExpenseType && (
                       <div className="animate-fade">
                         <div style={{ textAlign: "center", fontSize: 10.5, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginTop: 10, marginBottom: 2 }}>ΚΟΣΤΟΣ €</div>
-                        <input className="big-input" type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0€" autoFocus value={expenseCost} onChange={(e) => setExpenseCost(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && expenseCost.trim() !== "") logTripExpense(); }} style={{ fontSize: 38, marginBottom: 6 }} />
+                        <CostInput className="big-input" big placeholder="0€" autoFocus value={expenseCost} onChange={(e) => setExpenseCost(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && expenseCost.trim() !== "") logTripExpense(); }} style={{ fontSize: 38, marginBottom: 6 }} />
                         <input className="pill-input" type="text" placeholder="Σημείωση (προαιρετικό)" value={expenseNote} onChange={(e) => setExpenseNote(e.target.value)} style={{ textAlign: "center", marginBottom: 12 }} />
                         <button onClick={logTripExpense} className="tap" disabled={expenseCost.trim() === ""} style={{ width: "100%", background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 14, fontWeight: 700, padding: "12px 0", opacity: expenseCost.trim() === "" ? 0.5 : 1 }}>
                           Καταχώρηση
@@ -1763,6 +1806,59 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
     <div>
       <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
       <div key={value} className="display animate-pop" style={{ fontSize: 19, fontWeight: 700, color: accent || "var(--text)" }}>{value}</div>
+    </div>
+  );
+}
+
+// A cost input that always shows € right after the digits as you type -
+// not just as a placeholder that vanishes once you start entering a value.
+function CostInput({
+  value, onChange, placeholder, className, big, autoFocus, onKeyDown, style,
+}: {
+  value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string;
+  className?: string; big?: boolean; autoFocus?: boolean; onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  style?: React.CSSProperties;
+}) {
+  // The HTML `size` attribute only estimates character width - it doesn't
+  // match the actual rendered pixel width of a proportional font, which
+  // left a visible gap pushing the number+€ group off-center. Measuring
+  // the real text width with a hidden mirror span fixes that precisely.
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+  const fontSize = style?.fontSize || (big ? 52 : undefined);
+
+  useEffect(() => {
+    if (measureRef.current) setMeasuredWidth(measureRef.current.offsetWidth);
+  }, [value, fontSize]);
+
+  return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline" }}>
+      <span
+        ref={measureRef}
+        aria-hidden="true"
+        style={{ position: "fixed", top: -9999, left: -9999, visibility: "hidden", whiteSpace: "pre", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize }}
+      >
+        {value}
+      </span>
+      <input
+        className={className}
+        type="text"
+        inputMode="decimal"
+        pattern="[0-9]*[.,]?[0-9]*"
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        autoFocus={autoFocus}
+        style={{
+          width: value ? measuredWidth + 2 : "100%",
+          flex: value ? "none" : undefined,
+          textAlign: value ? "left" : "center",
+          padding: big ? "6px 0" : undefined,
+          ...style,
+        }}
+      />
+      {value && <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, color: "var(--text)", fontSize }}>€</span>}
     </div>
   );
 }
@@ -2109,7 +2205,7 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
         <>
           <PasswordField value={draft} onChange={(e) => { setDraft(e.target.value); setError(""); }} placeholder="Όρισε κωδικό" onEnter={save} autoFocus />
           <div style={{ fontSize: 10.5, color: "var(--muted)", opacity: 0.7, margin: "10px 0", textAlign: "center" }}>
-            Θα χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα - δεν αποθηκεύεται πουθενά, ούτε σε αυτή τη συσκευή.
+            Θα χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα αρχείων.
           </div>
           <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>Επαναφορά κωδικού μετά από:</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
