@@ -1803,6 +1803,7 @@ function DocCard({
   // what's cached here; sessionPassword is purely a convenience so you're
   // not retyping the same password for a second document in one visit.
   const [unlockedUrl, setUnlockedUrl] = useState<string | null>(null);
+  const [imgLoadFailed, setImgLoadFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -1822,6 +1823,7 @@ function DocCard({
     if (res.ok) {
       const data = await res.json();
       setUnlockedUrl(data.url);
+      setImgLoadFailed(false);
       setShowPasswordPrompt(false);
       onPasswordVerified(password);
     } else {
@@ -1841,6 +1843,25 @@ function DocCard({
     fetchWithPassword(passwordInput).then(() => setPasswordInput(""));
   }
 
+  const [verifyingUpload, setVerifyingUpload] = useState(false);
+  async function verifyPasswordForUpload() {
+    if (!passwordInput) return;
+    setVerifyingUpload(true);
+    setPasswordError("");
+    const res = await fetch(`/api/v/${slug}/docs-unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: passwordInput }),
+    });
+    setVerifyingUpload(false);
+    if (res.ok) {
+      onPasswordVerified(passwordInput);
+      setShowPasswordPrompt(false);
+    } else {
+      setPasswordError("Λάθος κωδικός.");
+    }
+  }
+
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -1851,6 +1872,7 @@ function DocCard({
     setUploadProgress(null);
     if (url) {
       setUnlockedUrl(url);
+      setImgLoadFailed(false);
       onPasswordVerified(password);
       setShowPasswordPrompt(false);
       setPasswordInput("");
@@ -1947,23 +1969,26 @@ function DocCard({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "12px 14px", fontSize: 11.5, color: "var(--muted)", opacity: 0.7, textAlign: "center", lineHeight: 1.4 }}>
           Όρισε πρώτα κωδικό εγγράφων παραπάνω για να ανεβάσεις αρχείο.
         </div>
-      ) : sessionPassword || showPasswordPrompt ? (
-        <>
-          {showPasswordPrompt && !sessionPassword && (
-            <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px", marginBottom: 10 }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <Lock size={18} color={accent} style={{ marginBottom: 8 }} />
-                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Κωδικός για ανέβασμα</div>
-                <PasswordField value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }} placeholder="Κωδικός" autoFocus />
-                {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", margin: "8px 0" }}>{passwordError}</div>}
-              </div>
+      ) : sessionPassword ? (
+        <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)", cursor: "pointer" }}>
+          <Camera size={15} /> Προσθήκη εγγράφου
+          <input type="file" accept="image/*,application/pdf" onChange={handleFile} style={{ display: "none" }} />
+        </label>
+      ) : showPasswordPrompt ? (
+        <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <Lock size={18} color={accent} style={{ marginBottom: 8 }} />
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Κωδικός για ανέβασμα</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginBottom: 12, lineHeight: 1.4 }}>
+              Χρειάζεται ο κωδικός εγγράφων για να ανεβάσεις αρχείο σε αυτό το όχημα.
             </div>
-          )}
-          <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)", cursor: (sessionPassword || passwordInput) ? "pointer" : "default", opacity: (sessionPassword || passwordInput) ? 1 : 0.5 }}>
-            <Camera size={15} /> Προσθήκη εγγράφου
-            <input type="file" accept="image/*,application/pdf" onChange={handleFile} disabled={!sessionPassword && !passwordInput} style={{ display: "none" }} />
-          </label>
-        </>
+            <PasswordField value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }} placeholder="Κωδικός" onEnter={verifyPasswordForUpload} autoFocus />
+            {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", margin: "8px 0" }}>{passwordError}</div>}
+            <button onClick={verifyPasswordForUpload} disabled={verifyingUpload} className="tap" style={{ width: "100%", background: accent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "10px 0", marginTop: passwordError ? 0 : 8 }}>
+              {verifyingUpload ? "..." : "Ξεκλείδωμα"}
+            </button>
+          </div>
+        </div>
       ) : (
         <button
           onClick={() => setShowPasswordPrompt(true)}
