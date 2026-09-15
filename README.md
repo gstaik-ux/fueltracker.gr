@@ -29,6 +29,30 @@ once against your existing data. It adds: plate number, VIN, insurance
 date, ΚΤΕΟ date, insurance/ΚΤΕΟ photo storage, and a trip-expense flag on
 service entries.
 
+## Settings tab (new)
+
+Trip Mode moved out of the bottom nav into a new "Ρυθμίσεις" (Settings)
+tab - it now lives at the top of that tab instead of having its own nav
+slot. The gear icon replaced the plane icon in the bottom nav.
+
+Also in Settings:
+
+- **Ήχοι** - mute the tap/success sound effects (personal to this device)
+- **Γρήγορη εναλλαγή** - a personal, device-local list of other vehicle
+  links for quick switching, without needing the admin password each time
+  (stored in localStorage, add a link once and it's remembered)
+- **Λήψη ιστορικού (CSV)** - export just this vehicle's fuel/service
+  history, open to anyone
+- **Admin-only** (only visible/usable if you're currently logged in as
+  admin): rename the vehicle, change its color/icon type/tank capacity,
+  adjust the oil-change interval and toggle reminders on/off, upload a
+  custom home-screen icon (falls back to the plain Carall logo if none is
+  set), and a danger-zone delete (type the vehicle's name to confirm -
+  deletes all its fuel/service history permanently)
+
+The admin homepage's vehicle list also supports swipe-to-delete now, as a
+second way to remove a vehicle.
+
 ## Document privacy
 
 Insurance/ΚΤΕΟ **photos and PDFs** are gated behind a password - a

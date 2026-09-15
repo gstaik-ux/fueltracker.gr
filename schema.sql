@@ -59,6 +59,13 @@ alter table vehicles add column if not exists docs_password_hash text;
 alter table vehicles add column if not exists docs_reset_months integer;
 alter table vehicles add column if not exists docs_password_set_at timestamptz;
 alter table vehicles add column if not exists home_icon_url text;
+alter table vehicles add column if not exists oil_interval_km integer not null default 10000;
+alter table vehicles add column if not exists vehicle_code char(6) unique;
+-- Backfill a random 6-digit code for any existing vehicle that doesn't
+-- have one yet (new vehicles get one automatically going forward).
+update vehicles set vehicle_code = lpad(floor(random() * 1000000)::text, 6, '0')
+where vehicle_code is null;
+alter table vehicles add column if not exists reminders_enabled boolean not null default true;
 alter table service_entries add column if not exists is_trip boolean not null default false;
 
 -- Add your vehicles here (edit and run once per vehicle):

@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
   ChevronDown,
+  ChevronLeft,
+  Plus,
+  Globe,
+  Car,
   Pencil,
   Fuel,
   Check,
@@ -27,6 +31,11 @@ import {
   Eye,
   EyeOff,
   X,
+  ChevronRight,
+  Volume2,
+  VolumeX,
+  Trash2,
+  Palette,
 } from "lucide-react";
 
 type Fillup = {
@@ -115,14 +124,14 @@ const TRIP_CHECKLIST_ITEMS = [
   { key: "brakes", label: "Φρένα" },
 ];
 
-const TAB_ORDER = ["main", "docs", "fuel", "service", "trip"] as const;
+const TAB_ORDER = ["main", "docs", "fuel", "service", "settings"] as const;
 type Tab = (typeof TAB_ORDER)[number];
 const TAB_TITLES: Record<Tab, string | undefined> = {
   main: "Αρχική",
   docs: "Έγγραφα",
   fuel: undefined,
   service: "Συντήρηση",
-  trip: "Εκδρομή",
+  settings: "Ρυθμίσεις",
 };
 
 const SERVICE_CHART_COLOR = "#7c93b3";
@@ -205,6 +214,7 @@ function useSound() {
   }
 
   function tone(freq: number, delay: number, duration: number, volume: number) {
+    if (typeof localStorage !== "undefined" && localStorage.getItem("carall_muted") === "true") return;
     const ctx = getCtx();
     if (!ctx) return;
     const osc = ctx.createOscillator();
@@ -330,6 +340,10 @@ type Vehicle = {
   hasInsurancePhoto: boolean;
   hasKteoPhoto: boolean;
   hasDocsPassword: boolean;
+  homeIconUrl: string | null;
+  oilIntervalKm: number;
+  vehicleCode: string | null;
+  remindersEnabled: boolean;
   lastOdometer: number | null;
 };
 
@@ -338,11 +352,13 @@ export default function VehicleDashboard({
   initialFillups,
   initialServiceEntries,
   initialTab = "main",
+  isAdmin = false,
 }: {
   vehicle: Vehicle;
   initialFillups: Fillup[];
   initialServiceEntries: ServiceEntry[];
   initialTab?: Tab;
+  isAdmin?: boolean;
 }) {
   const slug = initialVehicle.slug;
   const themeAccent = initialVehicle.themeAccent;
@@ -394,6 +410,91 @@ export default function VehicleDashboard({
   const [editServiceForm, setEditServiceForm] = useState({ date: "", odometer: "", cost: "", note: "" });
 
   const [showVehicleDetailsForm, setShowVehicleDetailsForm] = useState(false);
+
+  // --- New Settings tab state ---
+  const [showIdentityForm, setShowIdentityForm] = useState(false);
+  const [identityDraft, setIdentityDraft] = useState({ name: "", themeAccent: "", vehicleIcon: "", tankCapacity: "" });
+  const [identitySaving, setIdentitySaving] = useState(false);
+  const [oilIntervalDraft, setOilIntervalDraft] = useState("");
+  const [savingReminders, setSavingReminders] = useState(false);
+  const [iconUploading, setIconUploading] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [settingsView, setSettingsView] = useState<string | null>(null);
+  const [myVehiclesList, setMyVehiclesList] = useState<{ slug: string; name: string }[]>([]);
+  const [showAddVehicleForm, setShowAddVehicleForm] = useState(false);
+  const [addVehicleInput, setAddVehicleInput] = useState("");
+  const [addVehicleError, setAddVehicleError] = useState("");
+  const [addingVehicle, setAddingVehicle] = useState(false);
+
+  // Personal, per-device list of other vehicles pulled in by code or link -
+  // open to anyone, no admin password needed. Loaded once on mount, same
+  // localStorage-in-useEffect pattern as the mute preference above.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("carall_my_vehicles");
+      if (saved) setMyVehiclesList(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  async function addVehicleByCodeOrLink() {
+    const raw = addVehicleInput.trim();
+    if (!raw) return;
+    setAddingVehicle(true);
+    setAddVehicleError("");
+
+    let url: string;
+    if (/^\d{6}$/.test(raw)) {
+      url = `/api/vehicle-lookup?code=${raw}`;
+    } else {
+      // Accept a pasted link in any form - just pull the slug out of it.
+      const match = raw.match(/\/v\/([a-z0-9-]+)/i);
+      if (!match) {
+        setAddingVehicle(false);
+        setAddVehicleError("Βάλε έναν έγκυρο σύνδεσμο ή 6ψήφιο κωδικό.");
+        return;
+      }
+      url = `/api/vehicle-lookup?slug=${match[1]}`;
+    }
+
+    const res = await fetch(url);
+    setAddingVehicle(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setAddVehicleError(data.error || "Κάτι πήγε στραβά.");
+      return;
+    }
+    const data = await res.json();
+    if (myVehiclesList.some((v) => v.slug === data.slug)) {
+      setAddVehicleError("Το όχημα είναι ήδη στη λίστα σου.");
+      return;
+    }
+    const next = [...myVehiclesList, { slug: data.slug, name: data.name }];
+    setMyVehiclesList(next);
+    localStorage.setItem("carall_my_vehicles", JSON.stringify(next));
+    setAddVehicleInput("");
+    setShowAddVehicleForm(false);
+    playSuccess();
+  }
+
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  // Mute preference is personal to this device - loaded from localStorage
+  // once on mount (client-only, same reasoning as the greeting/hint fixes
+  // earlier - localStorage doesn't exist during server-side rendering).
+  useEffect(() => {
+    try {
+      setSoundMuted(localStorage.getItem("carall_muted") === "true");
+    } catch {}
+  }, []);
+
+  function toggleMute() {
+    const next = !soundMuted;
+    setSoundMuted(next);
+    localStorage.setItem("carall_muted", String(next));
+  }
+
   // Kept in memory only, for this one open page visit - never sent anywhere
   // except fresh in each request when actually needed, and never persisted
   // (no cookie, no storage). Purely so you don't have to retype the same
@@ -446,6 +547,7 @@ export default function VehicleDashboard({
   // time-of-day greeting instead (queued by the effect above - which,
   // since it's declared first, always runs before this one on mount).
   useEffect(() => {
+    if (viewMode !== "settings") setSettingsView(null); // always start fresh at the top-level list on re-entry
     const title = pendingGreetingRef.current || TAB_TITLES[viewMode] || null;
     pendingGreetingRef.current = null;
     setHeaderText(title);
@@ -540,17 +642,20 @@ export default function VehicleDashboard({
   }, [ascEntries]);
 
   const oilReminder = useMemo(() => {
+    if (!vehicle.remindersEnabled) return null;
     const oilEntries = serviceEntries.filter((s) => s.type === "oil" && s.odometer != null);
     if (oilEntries.length === 0 || vehicle.lastOdometer == null) return null;
     const lastOil = oilEntries.reduce((max, s) => (s.odometer! > max.odometer! ? s : max), oilEntries[0]);
     const sinceOil = vehicle.lastOdometer - lastOil.odometer!;
-    if (sinceOil >= OIL_CHANGE_INTERVAL_KM) return { overdue: true, km: sinceOil, remaining: 0 };
-    if (sinceOil >= OIL_CHANGE_INTERVAL_KM * 0.9) return { overdue: false, km: sinceOil, remaining: OIL_CHANGE_INTERVAL_KM - sinceOil };
+    const interval = vehicle.oilIntervalKm;
+    if (sinceOil >= interval) return { overdue: true, km: sinceOil, remaining: 0 };
+    if (sinceOil >= interval * 0.9) return { overdue: false, km: sinceOil, remaining: interval - sinceOil };
     return null;
-  }, [serviceEntries, vehicle.lastOdometer]);
+  }, [serviceEntries, vehicle.lastOdometer, vehicle.oilIntervalKm, vehicle.remindersEnabled]);
 
   const reminderNotifications = useMemo(() => {
     const list: { id: string; color: string; tab: Tab; Icon: any; text: string }[] = [];
+    if (!vehicle.remindersEnabled) return list;
     if (oilReminder) {
       list.push({
         id: "oil",
@@ -583,7 +688,7 @@ export default function VehicleDashboard({
       });
     }
     return list;
-  }, [vehicle.insuranceDate, vehicle.kteoDate, oilReminder]);
+  }, [vehicle.insuranceDate, vehicle.kteoDate, oilReminder, vehicle.remindersEnabled]);
   const unseenCount = reminderNotifications.filter((n) => !seenNotificationIds.has(n.id)).length;
 
   const yearlyDistance = useMemo(() => {
@@ -939,6 +1044,73 @@ export default function VehicleDashboard({
       setVehicle((v) => ({ ...v, plateNumber: vehicleDetailsDraft.plate.trim() }));
       setShowVehicleDetailsForm(false);
       playSuccess();
+    }
+  }
+
+  async function saveIdentity() {
+    setIdentitySaving(true);
+    const res = await fetch(`/api/v/${slug}/identity`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: identityDraft.name.trim(),
+        themeAccent: identityDraft.themeAccent,
+        vehicleIcon: identityDraft.vehicleIcon,
+        tankCapacity: identityDraft.tankCapacity.trim() === "" ? null : num(identityDraft.tankCapacity),
+      }),
+    });
+    setIdentitySaving(false);
+    if (res.ok) {
+      setVehicle((v) => ({
+        ...v,
+        name: identityDraft.name.trim(),
+        themeAccent: identityDraft.themeAccent,
+        vehicleIcon: identityDraft.vehicleIcon,
+        tankCapacity: identityDraft.tankCapacity.trim() === "" ? null : num(identityDraft.tankCapacity),
+      }));
+      setShowIdentityForm(false);
+      playSuccess();
+    }
+  }
+
+  async function saveReminders(newOilInterval: number, newEnabled: boolean) {
+    setSavingReminders(true);
+    const res = await fetch(`/api/v/${slug}/reminders`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oilIntervalKm: newOilInterval, remindersEnabled: newEnabled }),
+    });
+    setSavingReminders(false);
+    if (res.ok) {
+      setVehicle((v) => ({ ...v, oilIntervalKm: newOilInterval, remindersEnabled: newEnabled }));
+      playTap();
+    }
+  }
+
+  async function uploadHomeIcon(file: File) {
+    setIconUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/v/${slug}/home-icon`, { method: "POST", body: formData });
+    setIconUploading(false);
+    if (res.ok) {
+      const data = await res.json();
+      setVehicle((v) => ({ ...v, homeIconUrl: data.url }));
+      playSuccess();
+    }
+  }
+  async function removeHomeIcon() {
+    setVehicle((v) => ({ ...v, homeIconUrl: null }));
+    await fetch(`/api/v/${slug}/home-icon`, { method: "DELETE" });
+  }
+
+  async function deleteVehicle() {
+    setDeleting(true);
+    const res = await fetch(`/api/v/${slug}/identity`, { method: "DELETE" });
+    if (res.ok) {
+      window.location.href = "/";
+    } else {
+      setDeleting(false);
     }
   }
 
@@ -1658,25 +1830,356 @@ export default function VehicleDashboard({
             </>
           )}
 
-          {viewMode === "trip" && (
+          {viewMode === "settings" && (
             <>
-              <div className="animate-in card" style={{ padding: "18px 20px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div className="display" style={{ fontSize: 16, fontWeight: 700 }}>Λειτουργία Εκδρομής</div>
-                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{tripModeActive ? "Ενεργή" : "Ανενεργή"}</div>
-                </div>
-                <button onClick={toggleTripMode} style={{ background: tripModeActive ? themeAccent : "rgba(255,255,255,0.06)", border: "none", borderRadius: 999, padding: "10px 18px", color: tripModeActive ? "#08090a" : "var(--muted)", fontSize: 13, fontWeight: 700 }}>
-                  {tripModeActive ? "Ενεργή" : "Ενεργοποίηση"}
-                </button>
-              </div>
-
-              {tripModeActive && (
+              {!settingsView ? (
                 <>
-                  <div className="animate-in card" style={{ padding: "16px 18px", marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                      <SectionLabel style={{ marginBottom: 0 }}>Έξοδα εκδρομής</SectionLabel>
-                      <div className="display" style={{ fontSize: 14, fontWeight: 700, color: themeAccent }}>{fmtMoney(tripSessionExpenses.reduce((s, e) => s + (e.cost || 0), 0))}</div>
+                  {!showAddVehicleForm ? (
+                    <button
+                      onClick={() => { playTap(); setShowAddVehicleForm(true); }}
+                      className="animate-in tap"
+                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "16px 18px", marginBottom: 16, background: "rgba(255,255,255,0.045)", border: "none", borderRadius: 22, color: "var(--text)" }}
+                    >
+                      <span className="row-icon" style={{ background: `${themeAccent}22` }}><Plus size={16} color={themeAccent} /></span>
+                      <div className="display" style={{ fontSize: 15, fontWeight: 700, flex: 1, textAlign: "left" }}>Προσθήκη Οχήματος</div>
+                      <ChevronRight size={17} color="var(--muted)" />
+                    </button>
+                  ) : (
+                    <div className="animate-in card" style={{ padding: "16px 18px", marginBottom: 16 }}>
+                      <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
+                        Βάλε τον 6ψήφιο κωδικό ή τον σύνδεσμο του οχήματος για να το προσθέσεις στη λίστα σου.
+                      </div>
+                      <input
+                        className="pill-input"
+                        placeholder="π.χ. 482917 ή σύνδεσμος"
+                        value={addVehicleInput}
+                        onChange={(e) => { setAddVehicleInput(e.target.value); setAddVehicleError(""); }}
+                        style={{ marginBottom: 8 }}
+                      />
+                      {addVehicleError && <div style={{ fontSize: 12, color: "#e2323a", marginBottom: 8 }}>{addVehicleError}</div>}
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={addVehicleByCodeOrLink} disabled={addingVehicle} className="tap" style={{ flex: 1, background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "11px 0" }}>
+                          {addingVehicle ? "..." : "Προσθήκη"}
+                        </button>
+                        <button onClick={() => { setShowAddVehicleForm(false); setAddVehicleInput(""); setAddVehicleError(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 13, padding: "0 10px" }}>Άκυρο</button>
+                      </div>
                     </div>
+                  )}
+
+                  {myVehiclesList.length > 0 && (
+                    <div className="animate-in card" style={{ padding: "4px 16px", marginBottom: 16 }}>
+                      {myVehiclesList.map((v, i, arr) => (
+                        <a
+                          key={v.slug}
+                          href={`/v/${v.slug}`}
+                          className="tap"
+                          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none", color: "var(--text)", textDecoration: "none", padding: "14px 0", fontSize: 14.5, fontWeight: 600 }}
+                        >
+                          {v.name}
+                          <ChevronRight size={16} color="var(--muted)" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={playTap}
+                    className="animate-in tap"
+                    style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "16px 18px", marginBottom: 16, background: `${themeAccent}14`, border: `1px solid ${themeAccent}33`, borderRadius: 22 }}
+                  >
+                    <span className="row-icon" style={{ background: `${themeAccent}33` }}><Home size={16} color={themeAccent} /></span>
+                    <div className="display" style={{ fontSize: 15, fontWeight: 700, flex: 1, textAlign: "left" }}>Προσθήκη στην αρχική</div>
+                    <ChevronRight size={17} color={themeAccent} />
+                  </button>
+
+                  <div className="animate-in card" style={{ padding: "4px 16px" }}>
+                    <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, padding: "12px 0 4px" }}>Ρυθμίσεις</div>
+                    {[
+                      { key: "general", label: "Γενικές ρυθμίσεις", Icon: Globe },
+                      { key: "vehicle", label: "Το όχημα σας", Icon: Car },
+                      { key: "notifications", label: "Ειδοποιήσεις", Icon: Bell },
+                      { key: "theme", label: "Θέμα εφαρμογής", Icon: Palette },
+                      { key: "trip", label: "Λειτουργία Εκδρομής", Icon: Plane },
+                      { key: "sound", label: "Ήχοι", Icon: Volume2 },
+                    ].map((cat, i, arr) => (
+                      <button
+                        key={cat.key}
+                        onClick={() => { playTap(); setSettingsView(cat.key); }}
+                        className="tap"
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none",
+                          color: "var(--text)",
+                          background: "none",
+                          border: "none",
+                          padding: "14px 0",
+                          fontSize: 14.5,
+                          fontWeight: 600,
+                        }}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <span className="row-icon" style={{ background: `${themeAccent}22` }}>
+                            <cat.Icon size={15} color={themeAccent} />
+                          </span>
+                          {cat.label}
+                        </span>
+                        <ChevronRight size={16} color="var(--muted)" />
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="animate-in card" style={{ padding: "4px 16px", marginTop: 16 }}>
+                    <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, padding: "12px 0 4px" }}>Νομικά</div>
+                    {[
+                      { label: "Κατέβασμα Ιστορικού", action: "download", Icon: Download },
+                      { label: "Προσωπικά δεδομένα", action: null, Icon: Lock },
+                      { label: "Όροι χρήσης", action: null, Icon: FileText },
+                      { label: "Ρυθμίσεις απορρήτου", action: null, Icon: Eye },
+                    ].map((row, i, arr) => (
+                      <button
+                        key={row.label}
+                        onClick={() => {
+                          playTap();
+                          if (row.action === "download") {
+                            const rows = [["Ημερομηνία", "Τύπος", "Λίτρα", "Κόστος", "Χιλιόμετρα", "Σημείωση"]];
+                            allHistory.forEach((e: any) => {
+                              if (e.kind === "fuel") rows.push([e.date, "Καύσιμο", String(e.liters), String(e.cost), e.odometer != null ? String(e.odometer) : "", ""]);
+                              else rows.push([e.date, serviceLabel(e.type), "", e.cost != null ? String(e.cost) : "", e.odometer != null ? String(e.odometer) : "", e.note || ""]);
+                            });
+                            const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+                            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `${vehicle.name}.csv`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }
+                        }}
+                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none", color: "var(--text)", background: "none", border: "none", padding: "14px 0", fontSize: 14.5, fontWeight: 600 }}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <span className="row-icon" style={{ background: `${themeAccent}22` }}>
+                            <row.Icon size={15} color={themeAccent} />
+                          </span>
+                          {row.label}
+                        </span>
+                        <ChevronRight size={16} color="var(--muted)" />
+                      </button>
+                    ))}
+                  </div>
+
+                  {isAdmin && (
+                    !showDeleteConfirm ? (
+                      <div className="animate-in card" style={{ padding: "4px 16px", marginTop: 16 }}>
+                        <button
+                          onClick={() => setShowDeleteConfirm(true)}
+                          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", color: "#e2323a", background: "none", border: "none", padding: "14px 0", fontSize: 14.5, fontWeight: 600 }}
+                        >
+                          <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <span className="row-icon" style={{ background: "rgba(226,50,58,0.15)" }}>
+                              <Trash2 size={15} color="#e2323a" />
+                            </span>
+                            Διαγραφή Οχήματος
+                          </span>
+                          <ChevronRight size={16} color="var(--muted)" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="animate-in card" style={{ padding: "16px 18px", marginTop: 16, border: "1px solid rgba(226,50,58,0.3)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                          <span className="row-icon" style={{ background: "rgba(226,50,58,0.15)" }}><Trash2 size={16} color="#e2323a" /></span>
+                          <div className="display" style={{ fontSize: 15, fontWeight: 700, color: "#e2323a" }}>Διαγραφή Οχήματος</div>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
+                          Θα διαγραφούν όλα τα δεδομένα - καύσιμα, συντήρηση, έγγραφα. Δεν αναιρείται. Πληκτρολόγησε <b>ΣΥΜΦΩΝΩ</b> για επιβεβαίωση.
+                        </div>
+                        <input className="pill-input" value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} style={{ marginBottom: 10 }} />
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button
+                            onClick={deleteVehicle}
+                            disabled={deleteConfirmText.trim().toUpperCase() !== "ΣΥΜΦΩΝΩ" || deleting}
+                            className="tap"
+                            style={{ flex: 1, background: "#e2323a", color: "#fff", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "11px 0", opacity: deleteConfirmText.trim().toUpperCase() === "ΣΥΜΦΩΝΩ" ? 1 : 0.4 }}
+                          >
+                            {deleting ? "..." : "Οριστική διαγραφή"}
+                          </button>
+                          <button onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 13, padding: "0 10px" }}>Άκυρο</button>
+                        </div>
+                      </div>
+                    )
+                  )}
+
+                  <div style={{ textAlign: "center", fontSize: 11, color: "var(--muted)", opacity: 0.6, marginTop: 18, marginBottom: 4 }}>
+                    Carall v2.0.0 · Made by Gstaik
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setSettingsView(null)} className="tap" style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: themeAccent, fontSize: 14, fontWeight: 600, padding: "6px 0", marginBottom: 8 }}>
+                    <ChevronLeft size={18} /> Ρυθμίσεις
+                  </button>
+
+                  {settingsView === "general" && (
+                    <div className="animate-in card" style={{ padding: "4px 18px" }}>
+                      {[
+                        { label: "Νόμισμα", value: "EUR (€)" },
+                        { label: "Γλώσσα", value: "Ελληνικά" },
+                        { label: "Χώρα", value: "Ελλάδα" },
+                        { label: "Πόλη", value: "—" },
+                      ].map((row, i, arr) => (
+                        <div key={row.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none" }}>
+                          <div style={{ fontSize: 14, color: "var(--text)" }}>{row.label}</div>
+                          <div style={{ fontSize: 13.5, color: "var(--muted)" }}>{row.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {settingsView === "vehicle" && (
+                    <>
+                      <div className="animate-in card" style={{ padding: "4px 18px" }}>
+                        {[
+                          { label: "Όνομα οχήματος", value: vehicle.name },
+                          { label: "Ημερομηνία έκδοσης", value: "—" },
+                          { label: "Κυβικά", value: "—" },
+                          { label: "Τύπος οχήματος", value: vehicle.vehicleIcon === "bike" ? "Μηχανή" : "Αυτοκίνητο" },
+                          { label: "Μέση κατανάλωση", value: "—" },
+                          { label: "Χιλιόμετρα", value: vehicle.lastOdometer != null ? `${fmtNum(vehicle.lastOdometer, 0)} km` : "—" },
+                          { label: "Κωδικός οχήματος", value: vehicle.vehicleCode || "—" },
+                        ].map((row, i, arr) => (
+                          <div key={row.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none" }}>
+                            <div style={{ fontSize: 14, color: "var(--text)" }}>{row.label}</div>
+                            <div style={{ fontSize: 13.5, color: "var(--muted)" }}>{row.value}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="animate-in card" style={{ padding: "16px 18px", marginTop: 16 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                          <span className="row-icon" style={{ background: `${themeAccent}22` }}><Download size={15} color={themeAccent} style={{ transform: "rotate(180deg)" }} /></span>
+                          <div className="display" style={{ fontSize: 15, fontWeight: 700 }}>Εισαγωγή Ιστορικού</div>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
+                          Ανέβασε ένα CSV με καύσιμα ή συντήρηση για να τα προσθέσεις στο ιστορικό αυτού του οχήματος.
+                        </div>
+                        <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)", cursor: "pointer" }}>
+                          <FileText size={15} /> Επιλογή αρχείου CSV
+                          <input type="file" accept=".csv" onChange={playTap} style={{ display: "none" }} />
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {settingsView === "notifications" && (
+                    <>
+                      <div className="animate-in card" style={{ padding: "16px 18px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                          <span className="row-icon" style={{ background: `${themeAccent}22` }}><Bell size={15} color={themeAccent} /></span>
+                          <div className="display" style={{ fontSize: 15, fontWeight: 700 }}>Ειδοποιήσεις στη συσκευή</div>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
+                          Λάβε ειδοποιήσεις στο κινητό σου ακόμα κι όταν η εφαρμογή είναι κλειστή. Χρειάζεται να έχεις προσθέσει το όχημα στην αρχική οθόνη σου.
+                        </div>
+                        <button onClick={playTap} style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 999, padding: "11px 0", color: "var(--text)", fontSize: 12.5, fontWeight: 600 }}>
+                          Ενεργοποίηση
+                        </button>
+                      </div>
+
+                      {isAdmin ? (
+                        <div className="animate-in card" style={{ padding: "16px 18px", marginTop: 16 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                            <div style={{ fontSize: 13, color: "var(--text)" }}>Ενεργές υπενθυμίσεις</div>
+                            <button
+                              onClick={() => saveReminders(vehicle.oilIntervalKm, !vehicle.remindersEnabled)}
+                              disabled={savingReminders}
+                              style={{ background: vehicle.remindersEnabled ? themeAccent : "rgba(255,255,255,0.06)", border: "none", borderRadius: 999, padding: "8px 16px", color: vehicle.remindersEnabled ? "#08090a" : "var(--muted)", fontSize: 12, fontWeight: 700 }}
+                            >
+                              {vehicle.remindersEnabled ? "Ενεργές" : "Ανενεργές"}
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>ΔΙΑΣΤΗΜΑ ΑΛΛΑΓΗΣ ΛΑΔΙΩΝ (km)</div>
+                          <input
+                            className="pill-input"
+                            type="text"
+                            inputMode="numeric"
+                            value={oilIntervalDraft || String(vehicle.oilIntervalKm)}
+                            onChange={(e) => setOilIntervalDraft(e.target.value)}
+                            onBlur={() => { const v = parseInt(oilIntervalDraft, 10); if (v > 0) saveReminders(v, vehicle.remindersEnabled); setOilIntervalDraft(""); }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="animate-in card" style={{ padding: "16px 18px", marginTop: 16, fontSize: 12.5, color: "var(--muted)" }}>
+                          Οι υπενθυμίσεις για λάδια/έγγραφα ρυθμίζονται μόνο από τον διαχειριστή.
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {settingsView === "theme" && (
+                    isAdmin ? (
+                      <div className="animate-in card" style={{ padding: "16px 18px" }}>
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>ΧΡΩΜΑ ΣΑΪΤ</div>
+                        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+                          {["#e2323a", "#3e8ec9", "#4e9e76", "#c9a13e", "#9c5fd6", "#e07ba0", "#e07a3e", "#6b7a8f"].map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => { setIdentityDraft({ name: vehicle.name, themeAccent: c, vehicleIcon: vehicle.vehicleIcon, tankCapacity: vehicle.tankCapacity != null ? String(vehicle.tankCapacity) : "" }); saveIdentity(); }}
+                              style={{ width: 32, height: 32, borderRadius: 99, background: c, border: c === themeAccent ? "3px solid #fff" : "none" }}
+                            />
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>ΕΙΚΟΝΙΔΙΟ ΑΡΧΙΚΗΣ ΟΘΟΝΗΣ</div>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
+                          Χωρίς δικό του, χρησιμοποιείται το λογότυπο Carall.
+                        </div>
+                        {vehicle.homeIconUrl ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <img src={vehicle.homeIconUrl} alt="" style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+                              <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 999, padding: "9px 0", fontSize: 12.5, fontWeight: 600, color: "var(--text)", cursor: "pointer" }}>
+                                {iconUploading ? "..." : "Αλλαγή"}
+                                <input type="file" accept="image/*" onChange={(e) => e.target.files && uploadHomeIcon(e.target.files[0])} disabled={iconUploading} style={{ display: "none" }} />
+                              </label>
+                              <button onClick={removeHomeIcon} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, padding: 0 }}>Αφαίρεση</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)", cursor: "pointer" }}>
+                            <Camera size={15} /> {iconUploading ? "Μεταφόρτωση..." : "Προσθήκη εικόνας"}
+                            <input type="file" accept="image/*" onChange={(e) => e.target.files && uploadHomeIcon(e.target.files[0])} disabled={iconUploading} style={{ display: "none" }} />
+                          </label>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="animate-in card" style={{ padding: "16px 18px", fontSize: 12.5, color: "var(--muted)" }}>
+                        Το χρώμα και το εικονίδιο αλλάζουν μόνο από τον διαχειριστή.
+                      </div>
+                    )
+                  )}
+
+                  {settingsView === "trip" && (
+                    <>
+                      <div className="animate-in card" style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div>
+                          <div className="display" style={{ fontSize: 16, fontWeight: 700 }}>Λειτουργία Εκδρομής</div>
+                          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{tripModeActive ? "Ενεργή" : "Ανενεργή"}</div>
+                        </div>
+                        <button onClick={toggleTripMode} style={{ background: tripModeActive ? themeAccent : "rgba(255,255,255,0.06)", border: "none", borderRadius: 999, padding: "10px 18px", color: tripModeActive ? "#08090a" : "var(--muted)", fontSize: 13, fontWeight: 700 }}>
+                          {tripModeActive ? "Ενεργή" : "Ενεργοποίηση"}
+                        </button>
+                      </div>
+
+                      {tripModeActive && (
+                        <>
+                          <div className="animate-in card" style={{ padding: "16px 18px", marginTop: 16 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                              <SectionLabel style={{ marginBottom: 0 }}>Έξοδα εκδρομής</SectionLabel>
+                              <div className="display" style={{ fontSize: 14, fontWeight: 700, color: themeAccent }}>{fmtMoney(tripSessionExpenses.reduce((s, e) => s + (e.cost || 0), 0))}</div>
+                            </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: addingExpenseType ? 4 : 0 }}>
                       {TRIP_EXPENSE_TYPES.map((t) => {
                         const selected = addingExpenseType === t.key;
@@ -1763,6 +2266,19 @@ export default function VehicleDashboard({
                       </div>
                     )}
                   </div>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {settingsView === "sound" && (
+                    <div className="animate-in card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: 14, color: "var(--text)" }}>Ήχοι εφαρμογής</div>
+                      <button onClick={toggleMute} style={{ background: !soundMuted ? themeAccent : "rgba(255,255,255,0.06)", border: "none", borderRadius: 999, padding: "9px 16px", color: !soundMuted ? "#08090a" : "var(--muted)", fontSize: 12.5, fontWeight: 700 }}>
+                        {soundMuted ? "Σίγαση" : "Ενεργοί"}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </>
@@ -1816,7 +2332,7 @@ export default function VehicleDashboard({
             { key: "docs" as Tab, Icon: FileText },
             { key: "fuel" as Tab, Icon: Fuel },
             { key: "service" as Tab, Icon: Wrench },
-            { key: "trip" as Tab, Icon: Plane },
+            { key: "settings" as Tab, Icon: Settings },
           ].map((tab) => {
             const active = viewMode === tab.key;
             return (

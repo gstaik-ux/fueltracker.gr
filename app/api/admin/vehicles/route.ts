@@ -21,10 +21,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Αυτό το slug υπάρχει ήδη." }, { status: 409 });
   }
 
+  // A short shareable code, separate from the slug - lets a family member
+  // pull an existing vehicle into their own device's list without needing
+  // the admin password, just this code (or a direct link). Retried on the
+  // rare chance of a collision with an existing code.
+  let vehicleCode = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+    const clash = await query("select 1 from vehicles where vehicle_code = $1", [candidate]);
+    if (clash.rows.length === 0) {
+      vehicleCode = candidate;
+      break;
+    }
+  }
+
   const result = await query(
-    `insert into vehicles (slug, name, theme_accent, theme_bg, vehicle_icon, tank_capacity)
-     values ($1, $2, $3, $4, $5, $6)
-     returning slug, name, theme_accent, vehicle_icon`,
+    `insert into vehicles (slug, name, theme_accent, theme_bg, vehicle_icon, tank_capacity, vehicle_code)
+     values ($1, $2, $3, $4, $5, $6, $7)
+     returning slug, name, theme_accent, vehicle_icon, vehicle_code`,
     [
       cleanSlug,
       name.trim(),
@@ -32,6 +46,7 @@ export async function POST(req: NextRequest) {
       themeBg || "#0e0f12",
       vehicleIcon === "bike" ? "bike" : "car",
       tankCapacity ? Number(tankCapacity) : null,
+      vehicleCode || null,
     ]
   );
 

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { query } from "@/lib/db";
+import { isAdmin } from "@/lib/session";
 import VehicleDashboard from "./VehicleDashboard";
 
 export const dynamic = "force-dynamic";
@@ -9,12 +10,14 @@ function toDateStr(d: any): string {
 }
 
 export default async function VehiclePage({ params }: { params: { slug: string } }) {
+  const isCurrentlyAdmin = await isAdmin();
   const vehicleResult = await query(
     `select id, slug, name, theme_accent, theme_bg, vehicle_icon, tank_capacity,
             plate_number, insurance_date, kteo_date,
             (insurance_photo_url is not null) as has_insurance_photo,
             (kteo_photo_url is not null) as has_kteo_photo,
-            (docs_password_hash is not null) as has_docs_password
+            (docs_password_hash is not null) as has_docs_password,
+            home_icon_url, oil_interval_km, reminders_enabled, vehicle_code
      from vehicles where slug = $1`,
     [params.slug]
   );
@@ -63,8 +66,13 @@ export default async function VehiclePage({ params }: { params: { slug: string }
         hasInsurancePhoto: !!v.has_insurance_photo,
         hasKteoPhoto: !!v.has_kteo_photo,
         hasDocsPassword: !!v.has_docs_password,
+        homeIconUrl: v.home_icon_url || null,
+        oilIntervalKm: Number(v.oil_interval_km) || 10000,
+        remindersEnabled: v.reminders_enabled !== false,
+        vehicleCode: v.vehicle_code || null,
         lastOdometer,
       }}
+      isAdmin={isCurrentlyAdmin}
       initialFillups={fillups}
       initialServiceEntries={serviceResult.rows.map((r: any) => ({
         id: r.id,
