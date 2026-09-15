@@ -352,6 +352,7 @@ export default function VehicleDashboard({
   const [vehicleDetailsDraft, setVehicleDetailsDraft] = useState({ plate: "" });
 
   const [statsFilters, setStatsFilters] = useState({ fuel: true, service: false, trip: false });
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const [headerText, setHeaderText] = useState<string | null>(null);
   const pendingGreetingRef = useRef<string | null>(
@@ -427,8 +428,7 @@ export default function VehicleDashboard({
   }, [ascEntries]);
 
   const stats = useMemo(() => {
-    const year = new Date().getFullYear();
-    const ytd = entries.filter((e) => new Date(e.date + "T00:00:00").getFullYear() === year);
+    const ytd = entries.filter((e) => new Date(e.date + "T00:00:00").getFullYear() === selectedYear);
     const totalSpent = ytd.reduce((s, e) => s + e.cost, 0);
     const totalLiters = ytd.reduce((s, e) => s + e.liters, 0);
     const avgPrice = totalLiters > 0 ? totalSpent / totalLiters : NaN;
@@ -442,7 +442,7 @@ export default function VehicleDashboard({
     }
     const efficiency = totalDistance > 0 ? (totalFuel / totalDistance) * 100 : NaN;
     return { totalSpent, totalLiters, avgPrice, efficiency };
-  }, [entries, ascEntries]);
+  }, [entries, ascEntries, selectedYear]);
 
   const knownEfficiency = useMemo(() => {
     let totalDistance = 0, totalFuel = 0;
@@ -512,56 +512,69 @@ export default function VehicleDashboard({
   const unseenCount = reminderNotifications.filter((n) => !seenNotificationIds.has(n.id)).length;
 
   const yearlyDistance = useMemo(() => {
-    const year = new Date().getFullYear();
     let total = 0;
     for (let i = 1; i < ascEntries.length; i++) {
       const p = ascEntries[i - 1], c = ascEntries[i];
       if (p.odometer != null && c.odometer != null && c.odometer > p.odometer) {
-        if (new Date(c.date + "T00:00:00").getFullYear() === year) total += c.odometer - p.odometer;
+        if (new Date(c.date + "T00:00:00").getFullYear() === selectedYear) total += c.odometer - p.odometer;
       }
     }
     return total;
-  }, [ascEntries]);
+  }, [ascEntries, selectedYear]);
+
+  // Every year that actually has data, plus the current calendar year even
+  // if it's still empty - so there's always at least one year to land on.
+  const availableYears = useMemo(() => {
+    const years = new Set<number>([new Date().getFullYear()]);
+    entries.forEach((e) => years.add(new Date(e.date + "T00:00:00").getFullYear()));
+    serviceEntries.forEach((s) => years.add(new Date(s.date + "T00:00:00").getFullYear()));
+    return Array.from(years).sort((a, b) => b - a); // newest first
+  }, [entries, serviceEntries]);
+
+  function cycleYear(direction: 1 | -1) {
+    const idx = availableYears.indexOf(selectedYear);
+    if (idx === -1) return;
+    const nextIdx = (idx + direction + availableYears.length) % availableYears.length;
+    setSelectedYear(availableYears[nextIdx]);
+  }
 
   const monthlyData = useMemo(() => {
-    const year = new Date().getFullYear();
     const months = Array.from({ length: 12 }, (_, i) => ({
-      label: new Date(year, i, 1).toLocaleDateString("el-GR", { month: "short" }).replace(".", ""),
+      label: new Date(selectedYear, i, 1).toLocaleDateString("el-GR", { month: "short" }).replace(".", ""),
       fuel: 0,
       service: 0,
       trip: 0,
     }));
     entries.forEach((e) => {
       const d = new Date(e.date + "T00:00:00");
-      if (d.getFullYear() === year) months[d.getMonth()].fuel += e.cost;
+      if (d.getFullYear() === selectedYear) months[d.getMonth()].fuel += e.cost;
     });
     serviceEntries.forEach((s) => {
       if (s.cost == null) return;
       const d = new Date(s.date + "T00:00:00");
-      if (d.getFullYear() !== year) return;
+      if (d.getFullYear() !== selectedYear) return;
       if (s.type === "tolls" || s.type === "food") months[d.getMonth()].trip += s.cost;
       else months[d.getMonth()].service += s.cost;
     });
     return months;
-  }, [entries, serviceEntries]);
+  }, [entries, serviceEntries, selectedYear]);
 
   const statsFilteredTotal = useMemo(() => {
-    const year = new Date().getFullYear();
     let total = 0;
     if (statsFilters.fuel) {
-      total += entries.filter((e) => new Date(e.date + "T00:00:00").getFullYear() === year).reduce((s, e) => s + e.cost, 0);
+      total += entries.filter((e) => new Date(e.date + "T00:00:00").getFullYear() === selectedYear).reduce((s, e) => s + e.cost, 0);
     }
     if (statsFilters.service || statsFilters.trip) {
       serviceEntries.forEach((s) => {
         if (s.cost == null) return;
-        if (new Date(s.date + "T00:00:00").getFullYear() !== year) return;
+        if (new Date(s.date + "T00:00:00").getFullYear() !== selectedYear) return;
         const isTripType = s.type === "tolls" || s.type === "food";
         if (isTripType && statsFilters.trip) total += s.cost;
         if (!isTripType && statsFilters.service) total += s.cost;
       });
     }
     return total;
-  }, [entries, serviceEntries, statsFilters]);
+  }, [entries, serviceEntries, statsFilters, selectedYear]);
 
   const allHistory = useMemo(() => {
     const fuelItems = entries.map((e) => ({ ...e, kind: "fuel" as const }));
@@ -908,6 +921,7 @@ export default function VehicleDashboard({
     ref.y = y;
   }
   const swipeRef = useRef({ x: 0, y: 0 });
+  const chartSwipeRef = useRef({ x: 0, y: 0 });
 
   function goTab(idx: number) {
     const clamped = Math.max(0, Math.min(TAB_ORDER.length - 1, idx));
@@ -1181,7 +1195,13 @@ export default function VehicleDashboard({
                     );
                   })}
                 </div>
-                <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginBottom: 4 }}>Σύνολο φέτος</div>
+                <button
+                  onClick={() => { playTap(); cycleYear(1); }}
+                  style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginBottom: 4 }}
+                >
+                  Σύνολο {selectedYear}
+                  {availableYears.length > 1 && <ChevronDown size={11} style={{ transform: "rotate(-90deg)", opacity: 0.6 }} />}
+                </button>
                 <div key={`${statsFilters.fuel}${statsFilters.service}${statsFilters.trip}`} className="display animate-pop" style={{ fontSize: 30, fontWeight: 700, color: themeAccent, marginBottom: 18 }}>
                   {fmtMoney(statsFilteredTotal)}
                 </div>
@@ -1195,9 +1215,21 @@ export default function VehicleDashboard({
 
               {allHistory.length > 0 && (
                 <>
-                  <div className="animate-in card" style={{ padding: "18px 20px 8px", marginBottom: 16 }}>
+                  <div
+                    className="animate-in card"
+                    style={{ padding: "18px 20px 8px", marginBottom: 16 }}
+                    onTouchStart={(e) => { e.stopPropagation(); chartSwipeRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      const dx = e.changedTouches[0].clientX - chartSwipeRef.current.x;
+                      const dy = e.changedTouches[0].clientY - chartSwipeRef.current.y;
+                      if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+                      playTap();
+                      cycleYear(dx < 0 ? 1 : -1); // swipe left = older year, swipe right = newer year
+                    }}
+                  >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                      <SectionLabel style={{ marginBottom: 0 }}>Μηνιαία δαπάνη</SectionLabel>
+                      <SectionLabel style={{ marginBottom: 0 }}>Μηνιαία δαπάνη {selectedYear}</SectionLabel>
                       <div style={{ display: "flex", gap: 10 }}>
                         {statsFilters.fuel && <LegendDot color={themeAccent} label="Καύσιμα" />}
                         {statsFilters.service && <LegendDot color={SERVICE_CHART_COLOR} label="Συντήρηση" />}
@@ -1828,7 +1860,7 @@ function DocCard({
       onPasswordVerified(password);
     } else {
       setShowPasswordPrompt(true);
-      if (sessionPassword) setPasswordError("Λάθος κωδικός."); // a remembered password stopped working (e.g. just rotated)
+      setPasswordError("Λάθος κωδικός."); // shown regardless of whether this was a fresh attempt or a previously-remembered password that stopped working
     }
   }
 
@@ -1978,9 +2010,9 @@ function DocCard({
         <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
             <Lock size={18} color={accent} style={{ marginBottom: 8 }} />
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Κωδικός για ανέβασμα</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Προστατευμένο έγγραφο</div>
             <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginBottom: 12, lineHeight: 1.4 }}>
-              Χρειάζεται ο κωδικός εγγράφων για να ανεβάσεις αρχείο σε αυτό το όχημα.
+              Χρειάζεται ο κωδικός σας για να ανεβάσεις αρχείο.
             </div>
             <PasswordField value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }} placeholder="Κωδικός" onEnter={verifyPasswordForUpload} autoFocus />
             {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", margin: "8px 0" }}>{passwordError}</div>}
