@@ -238,7 +238,7 @@ function useSound() {
 // row of a list to give it one brief automatic "peek" on mount, teaching
 // the gesture exists - never repeats after that, and nothing permanent
 // (like a chevron) stays on the row.
-function SwipeToDelete({ children, onDelete, onEdit, showHint }: { children: React.ReactNode; onDelete: () => void; onEdit?: () => void; showHint?: boolean }) {
+function SwipeToDelete({ children, onDelete, onEdit, showHint, onHintShown }: { children: React.ReactNode; onDelete: () => void; onEdit?: () => void; showHint?: boolean; onHintShown?: () => void }) {
   const [dragX, setDragX] = useState(0);
   const draggingRef = useRef(false);
   const startXRef = useRef(0);
@@ -249,7 +249,13 @@ function SwipeToDelete({ children, onDelete, onEdit, showHint }: { children: Rea
     if (!showHint) return;
     const peekTo = onEdit ? 26 : -26; // peek toward edit if available, else delete
     const t1 = setTimeout(() => setDragX(peekTo), 500);
-    const t2 = setTimeout(() => setDragX(0), 1100);
+    const t2 = setTimeout(() => {
+      setDragX(0);
+      // Only report "shown" once the animation has actually finished -
+      // calling this any earlier would flip showHint off immediately and
+      // cancel t1/t2 via this effect's own cleanup before they'd fired.
+      onHintShown?.();
+    }, 1100);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [showHint, onEdit]);
 
@@ -412,6 +418,7 @@ export default function VehicleDashboard({
   }, []);
 
   // The swipe-to-edit/delete hint definitely shows the first two times the
+  // The swipe-to-edit/delete hint definitely shows the very first time the
   // app is ever opened (tracked in localStorage, so it survives reloads and
   // new visits) - after that, it only shows a 1-in-60 chance each time,
   // rather than nagging on every single visit forever. Computed inside
@@ -421,7 +428,7 @@ export default function VehicleDashboard({
   useEffect(() => {
     const KEY = "carall_swipe_hint_opens";
     const count = parseInt(localStorage.getItem(KEY) || "0", 10);
-    if (count < 2) {
+    if (count < 1) {
       localStorage.setItem(KEY, String(count + 1));
       setShowSwipeHint(true);
     } else {
@@ -1367,7 +1374,7 @@ export default function VehicleDashboard({
                           );
                         }
                         return (
-                          <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={showSwipeHint && i === 0}>
+                          <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={showSwipeHint && i === 0} onHintShown={() => setShowSwipeHint(false)}>
                             <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                                 <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Icon size={15} color={themeAccent} /></span>
@@ -1442,7 +1449,7 @@ export default function VehicleDashboard({
                       }
 
                       return (
-                        <SwipeToDelete key={e.id} onDelete={() => removeEntry(e.id)} onEdit={() => startEdit(e)} showHint={showSwipeHint && i === 0}>
+                        <SwipeToDelete key={e.id} onDelete={() => removeEntry(e.id)} onEdit={() => startEdit(e)} showHint={showSwipeHint && i === 0} onHintShown={() => setShowSwipeHint(false)}>
                           <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                               <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Fuel size={15} color={themeAccent} /></span>
@@ -1592,7 +1599,7 @@ export default function VehicleDashboard({
                     );
                   }
                   return (
-                    <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={showSwipeHint && i === 0}>
+                    <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={showSwipeHint && i === 0} onHintShown={() => setShowSwipeHint(false)}>
                       <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                           <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Icon size={15} color={themeAccent} /></span>
