@@ -411,6 +411,24 @@ export default function VehicleDashboard({
     pendingGreetingRef.current = getTimeGreeting();
   }, []);
 
+  // The swipe-to-edit/delete hint definitely shows the first two times the
+  // app is ever opened (tracked in localStorage, so it survives reloads and
+  // new visits) - after that, it only shows a 1-in-60 chance each time,
+  // rather than nagging on every single visit forever. Computed inside
+  // useEffect (not a lazy initializer) for the same reason as the greeting
+  // above - localStorage doesn't exist during server-side rendering.
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
+  useEffect(() => {
+    const KEY = "carall_swipe_hint_opens";
+    const count = parseInt(localStorage.getItem(KEY) || "0", 10);
+    if (count < 2) {
+      localStorage.setItem(KEY, String(count + 1));
+      setShowSwipeHint(true);
+    } else {
+      setShowSwipeHint(Math.random() < 1 / 60);
+    }
+  }, []);
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(new Set());
   const bellWrapperRef = useRef<HTMLDivElement>(null);
@@ -1349,7 +1367,7 @@ export default function VehicleDashboard({
                           );
                         }
                         return (
-                          <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={i === 0}>
+                          <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={showSwipeHint && i === 0}>
                             <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                                 <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Icon size={15} color={themeAccent} /></span>
@@ -1424,7 +1442,7 @@ export default function VehicleDashboard({
                       }
 
                       return (
-                        <SwipeToDelete key={e.id} onDelete={() => removeEntry(e.id)} onEdit={() => startEdit(e)} showHint={i === 0}>
+                        <SwipeToDelete key={e.id} onDelete={() => removeEntry(e.id)} onEdit={() => startEdit(e)} showHint={showSwipeHint && i === 0}>
                           <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                               <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Fuel size={15} color={themeAccent} /></span>
@@ -1574,7 +1592,7 @@ export default function VehicleDashboard({
                     );
                   }
                   return (
-                    <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={i === 0}>
+                    <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={showSwipeHint && i === 0}>
                       <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                           <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Icon size={15} color={themeAccent} /></span>
