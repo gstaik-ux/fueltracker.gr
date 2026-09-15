@@ -1847,18 +1847,23 @@ export default function VehicleDashboard({
                   ) : (
                     <div className="animate-in card" style={{ padding: "16px 18px", marginBottom: 16 }}>
                       <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
-                        Βάλε τον 6ψήφιο κωδικό ή τον σύνδεσμο του οχήματος για να το προσθέσεις στη λίστα σου.
+                        Βάλε τον 6ψήφιο κωδικό οχήματος για να το προσθέσεις στη λίστα σου.
                       </div>
                       <input
                         className="pill-input"
-                        placeholder="π.χ. 482917 ή σύνδεσμος"
+                        placeholder="π.χ. 482917"
                         value={addVehicleInput}
                         onChange={(e) => { setAddVehicleInput(e.target.value); setAddVehicleError(""); }}
                         style={{ marginBottom: 8 }}
                       />
-                      {addVehicleError && <div style={{ fontSize: 12, color: "#e2323a", marginBottom: 8 }}>{addVehicleError}</div>}
+                      {addVehicleError && <div style={{ fontSize: 12, color: "#e2323a", marginBottom: 8, textAlign: "center" }}>{addVehicleError}</div>}
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={addVehicleByCodeOrLink} disabled={addingVehicle} className="tap" style={{ flex: 1, background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "11px 0" }}>
+                        <button
+                          onClick={addVehicleByCodeOrLink}
+                          disabled={addingVehicle || !/^\d{6}$/.test(addVehicleInput.trim())}
+                          className="tap"
+                          style={{ flex: 1, background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "11px 0", opacity: /^\d{6}$/.test(addVehicleInput.trim()) ? 1 : 0.4 }}
+                        >
                           {addingVehicle ? "..." : "Προσθήκη"}
                         </button>
                         <button onClick={() => { setShowAddVehicleForm(false); setAddVehicleInput(""); setAddVehicleError(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 13, padding: "0 10px" }}>Άκυρο</button>
@@ -1888,7 +1893,7 @@ export default function VehicleDashboard({
                     style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "16px 18px", marginBottom: 16, background: `${themeAccent}14`, border: `1px solid ${themeAccent}33`, borderRadius: 22 }}
                   >
                     <span className="row-icon" style={{ background: `${themeAccent}33` }}><Home size={16} color={themeAccent} /></span>
-                    <div className="display" style={{ fontSize: 15, fontWeight: 700, flex: 1, textAlign: "left" }}>Προσθήκη στην αρχική</div>
+                    <div className="display" style={{ fontSize: 15, fontWeight: 700, flex: 1, textAlign: "left", color: "#fff" }}>Προσθήκη στην αρχική</div>
                     <ChevronRight size={17} color={themeAccent} />
                   </button>
 
