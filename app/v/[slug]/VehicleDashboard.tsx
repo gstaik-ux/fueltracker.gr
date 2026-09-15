@@ -330,6 +330,7 @@ type Vehicle = {
   hasInsurancePhoto: boolean;
   hasKteoPhoto: boolean;
   hasDocsPassword: boolean;
+  homeIconUrl: string | null;
   lastOdometer: number | null;
 };
 
@@ -1651,6 +1652,8 @@ export default function VehicleDashboard({
                 )}
               </div>
 
+              <HomeIconCard slug={slug} iconUrl={vehicle.homeIconUrl} accent={themeAccent} onChange={(url) => setVehicle((v) => ({ ...v, homeIconUrl: url }))} />
+
               <DocsPasswordCard slug={slug} hasPassword={vehicle.hasDocsPassword} accent={themeAccent} onSet={(pw) => { setVehicle((v) => ({ ...v, hasDocsPassword: true })); setDocsPassword(pw); }} />
 
               <DocCard slug={slug} field="insurance" title="Ασφάλεια" Icon={FileText} dateVal={vehicle.insuranceDate} onChange={(v) => updateDocDate("insuranceDate", v)} hasPhoto={vehicle.hasInsurancePhoto} hasPassword={vehicle.hasDocsPassword} onPhoto={(f, pw, onProgress) => updateDocPhoto("insurancePhotoUrl", f, pw, onProgress)} onRemovePhoto={() => removeDocPhoto("insurancePhotoUrl")} accent={themeAccent} sessionPassword={docsPassword} onPasswordVerified={setDocsPassword} />
@@ -2197,6 +2200,67 @@ function DocCard({
       </div>
     )}
     </>
+  );
+}
+
+function HomeIconCard({
+  slug, iconUrl, accent, onChange,
+}: { slug: string; iconUrl: string | null; accent: string; onChange: (url: string | null) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    setError("");
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/v/${slug}/home-icon`, { method: "POST", body: formData });
+    setUploading(false);
+    if (res.ok) {
+      const data = await res.json();
+      onChange(data.url);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Κάτι πήγε στραβά.");
+    }
+  }
+
+  async function remove() {
+    onChange(null);
+    await fetch(`/api/v/${slug}/home-icon`, { method: "DELETE" });
+  }
+
+  return (
+    <div className="animate-in card" style={{ padding: "18px 18px 20px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <span className="row-icon" style={{ background: `${accent}22` }}><Home size={16} color={accent} /></span>
+        <div className="display" style={{ fontSize: 15, fontWeight: 700 }}>Εικονίδιο Αρχικής Οθόνης</div>
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
+        Εμφανίζεται όταν προσθέτεις αυτό το όχημα στην αρχική οθόνη του κινητού σου (Share → Add to Home Screen). Χωρίς δικό του, χρησιμοποιείται το λογότυπο Carall.
+      </div>
+
+      {iconUrl ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <img src={iconUrl} alt="" style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 999, padding: "9px 0", fontSize: 12.5, fontWeight: 600, color: "var(--text)", cursor: "pointer" }}>
+              {uploading ? "..." : "Αλλαγή"}
+              <input type="file" accept="image/*" onChange={handleFile} disabled={uploading} style={{ display: "none" }} />
+            </label>
+            <button onClick={remove} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, padding: 0 }}>Αφαίρεση</button>
+          </div>
+        </div>
+      ) : (
+        <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 0", fontSize: 12.5, fontWeight: 600, color: "var(--muted)", cursor: "pointer" }}>
+          <Camera size={15} /> {uploading ? "Μεταφόρτωση..." : "Προσθήκη εικόνας"}
+          <input type="file" accept="image/*" onChange={handleFile} disabled={uploading} style={{ display: "none" }} />
+        </label>
+      )}
+      {error && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", marginTop: 8 }}>{error}</div>}
+    </div>
   );
 }
 

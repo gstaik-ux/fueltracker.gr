@@ -29,6 +29,18 @@ once against your existing data. It adds: plate number, VIN, insurance
 date, ΚΤΕΟ date, insurance/ΚΤΕΟ photo storage, and a trip-expense flag on
 service entries.
 
+## Custom home-screen icon per vehicle
+
+Each vehicle can have its own custom home-screen icon, uploaded from the
+"Εικονίδιο Αρχικής Οθόνης" card on its Έγγραφα tab. Adding that specific
+vehicle to your phone's home screen (Share → Add to Home Screen) uses that
+vehicle's own uploaded image; any vehicle without one falls back to the
+plain Carall logo. Not gated behind a password (unlike insurance/ΚΤΕΟ
+documents) - it's just a visual, not sensitive content.
+
+For best results, upload a roughly square image - it's cropped to fill a
+square icon.
+
 ## Document privacy
 
 Insurance/ΚΤΕΟ **photos and PDFs** are gated behind a password - a
