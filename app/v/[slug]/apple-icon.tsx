@@ -16,7 +16,7 @@ export default async function Icon({ params }: { params: { slug: string } }) {
   if (customIcon) {
     return new ImageResponse(
       (
-        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#ffffff" }}>
+        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0b0d" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={customIcon} width="180" height="180" style={{ objectFit: "cover" }} alt="" />
         </div>

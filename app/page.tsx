@@ -1,19 +1,21 @@
 import { query } from "@/lib/db";
-import { Car, Bike, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import AddVehicleForm from "./AddVehicleForm";
 import AdminBackupButton from "./AdminBackupButton";
+import VehicleIconEditor from "./VehicleIconEditor";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const result = await query(
-    "select slug, name, theme_accent, vehicle_icon from vehicles order by name"
+    "select slug, name, theme_accent, vehicle_icon, home_icon_url from vehicles order by name"
   );
   const vehicles = result.rows as {
     slug: string;
     name: string;
     theme_accent: string;
     vehicle_icon: string;
+    home_icon_url: string | null;
   }[];
 
   return (
@@ -35,7 +37,6 @@ export default async function Home() {
 
         <div className="card" style={{ padding: "4px 16px" }}>
           {vehicles.map((v, i) => {
-            const Icon = v.vehicle_icon === "bike" ? Bike : Car;
             return (
               <a
                 key={v.slug}
@@ -56,9 +57,7 @@ export default async function Home() {
                 }}
               >
                 <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span className="row-icon" style={{ background: `${v.theme_accent}22` }}>
-                    <Icon size={16} color={v.theme_accent} />
-                  </span>
+                  <VehicleIconEditor slug={v.slug} themeAccent={v.theme_accent} vehicleIcon={v.vehicle_icon} initialIconUrl={v.home_icon_url} />
                   {v.name}
                 </span>
                 <ChevronRight size={17} color="var(--muted)" />

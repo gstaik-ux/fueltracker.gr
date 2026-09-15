@@ -31,12 +31,17 @@ service entries.
 
 ## Custom home-screen icon per vehicle
 
-Each vehicle can have its own custom home-screen icon, uploaded from the
-"Εικονίδιο Αρχικής Οθόνης" card on its Έγγραφα tab. Adding that specific
-vehicle to your phone's home screen (Share → Add to Home Screen) uses that
-vehicle's own uploaded image; any vehicle without one falls back to the
-plain Carall logo. Not gated behind a password (unlike insurance/ΚΤΕΟ
-documents) - it's just a visual, not sensitive content.
+Each vehicle can have its own custom home-screen icon - but this is set
+from the **admin homepage only** (behind the admin password), not from the
+vehicle's own page. Tap the small icon next to a vehicle's name in the
+list to upload or change it. This is deliberate: vehicle pages themselves
+are open, no-login links (what the NFC tags point to), so putting the
+upload control there would let anyone with that link change the icon -
+keeping it admin-only avoids that.
+
+Adding a specific vehicle to your phone's home screen (Share → Add to Home
+Screen) then uses that vehicle's own uploaded image; any vehicle without
+one falls back to the plain Carall logo.
 
 For best results, upload a roughly square image - it's cropped to fill a
 square icon.

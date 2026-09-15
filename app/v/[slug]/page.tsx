@@ -14,8 +14,7 @@ export default async function VehiclePage({ params }: { params: { slug: string }
             plate_number, insurance_date, kteo_date,
             (insurance_photo_url is not null) as has_insurance_photo,
             (kteo_photo_url is not null) as has_kteo_photo,
-            (docs_password_hash is not null) as has_docs_password,
-            home_icon_url
+            (docs_password_hash is not null) as has_docs_password
      from vehicles where slug = $1`,
     [params.slug]
   );
@@ -64,7 +63,6 @@ export default async function VehiclePage({ params }: { params: { slug: string }
         hasInsurancePhoto: !!v.has_insurance_photo,
         hasKteoPhoto: !!v.has_kteo_photo,
         hasDocsPassword: !!v.has_docs_password,
-        homeIconUrl: v.home_icon_url || null,
         lastOdometer,
       }}
       initialFillups={fillups}
