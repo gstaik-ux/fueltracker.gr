@@ -466,6 +466,15 @@ export default function VehicleDashboard({
     playSuccess();
   }
 
+  async function unlinkVehicle(targetSlug: string) {
+    setMyVehiclesList((prev) => prev.filter((v) => v.slug !== targetSlug)); // optimistic
+    await fetch(`/api/v/${slug}/link-vehicle`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetSlug }),
+    });
+  }
+
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
 
@@ -1851,8 +1860,9 @@ export default function VehicleDashboard({
                         <PasswordField
                           value={addVehiclePassword}
                           onChange={(e) => { setAddVehiclePassword(e.target.value); setAddVehicleError(""); }}
-                          placeholder="Κωδικός πρόσβασης οχήματος"
+                          placeholder="Κωδικός πρόσβασης"
                           onEnter={addVehicleByCode}
+                          centered={false}
                         />
                         {addVehicleError && <div style={{ fontSize: 12, color: "#e2323a", marginTop: 8, textAlign: "center" }}>{addVehicleError}</div>}
                         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -1872,18 +1882,19 @@ export default function VehicleDashboard({
                     {myVehiclesList.map((v, i, arr) => {
                       const VIcon = v.vehicleIcon === "bike" ? Bike : Car;
                       return (
-                        <a
-                          key={v.slug}
-                          href={`/v/${v.slug}`}
-                          className="tap"
-                          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none", color: "var(--text)", textDecoration: "none", padding: "14px 0", fontSize: 14.5, fontWeight: 600 }}
-                        >
-                          <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <span className="row-icon" style={{ background: `${v.themeAccent || "#e7a33e"}22` }}><VIcon size={16} color={v.themeAccent || "#e7a33e"} /></span>
-                            {v.name}
-                          </span>
-                          <ChevronRight size={16} color="var(--muted)" />
-                        </a>
+                        <SwipeToDelete key={v.slug} onDelete={() => unlinkVehicle(v.slug)}>
+                          <a
+                            href={`/v/${v.slug}`}
+                            className="tap"
+                            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none", color: "var(--text)", textDecoration: "none", padding: "14px 0", fontSize: 14.5, fontWeight: 600 }}
+                          >
+                            <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <span className="row-icon" style={{ background: `${v.themeAccent || "#e7a33e"}22` }}><VIcon size={16} color={v.themeAccent || "#e7a33e"} /></span>
+                              {v.name}
+                            </span>
+                            <ChevronRight size={16} color="var(--muted)" />
+                          </a>
+                        </SwipeToDelete>
                       );
                     })}
                   </div>
@@ -2435,9 +2446,9 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 // A password input with a peek toggle - used both for setting a document
 // password and for entering one to unlock.
 function PasswordField({
-  value, onChange, placeholder, onEnter, autoFocus,
+  value, onChange, placeholder, onEnter, autoFocus, centered = true,
 }: {
-  value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; onEnter?: () => void; autoFocus?: boolean;
+  value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; onEnter?: () => void; autoFocus?: boolean; centered?: boolean;
 }) {
   const [show, setShow] = useState(false);
   return (
@@ -2450,7 +2461,7 @@ function PasswordField({
         onChange={onChange}
         onKeyDown={(e) => { if (e.key === "Enter" && onEnter) onEnter(); }}
         autoFocus={autoFocus}
-        style={{ textAlign: "center", paddingRight: 42 }}
+        style={{ textAlign: centered ? "center" : "left", paddingRight: 42 }}
       />
       <button
         type="button"
@@ -2621,7 +2632,7 @@ function DocCard({
               <Lock size={18} color={accent} style={{ marginBottom: 8 }} />
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Προστατευμένο έγγραφο</div>
               <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginBottom: 12, lineHeight: 1.4 }}>
-                Χρειάζεται ο κωδικός για να δεις και να κατεβάσεις αυτό το έγγραφο.
+                Χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα εγγράφου σε αυτό το όχημα - χωρίς εξαιρέσεις, χωρίς να θυμάται τη συσκευή.
               </div>
               <PasswordField value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }} placeholder="Κωδικός" onEnter={submitPassword} autoFocus />
               {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", margin: "8px 0" }}>{passwordError}</div>}
@@ -2664,7 +2675,7 @@ function DocCard({
             <Lock size={18} color={accent} style={{ marginBottom: 8 }} />
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textAlign: "center", marginBottom: 2 }}>Προστατευμένο έγγραφο</div>
             <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginBottom: 12, lineHeight: 1.4 }}>
-              Χρειάζεται ο κωδικός σας για να ανεβάσεις αρχείο.
+              Χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα εγγράφου σε αυτό το όχημα - χωρίς εξαιρέσεις, χωρίς να θυμάται τη συσκευή.
             </div>
             <PasswordField value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }} placeholder="Κωδικός" onEnter={verifyPasswordForUpload} autoFocus />
             {passwordError && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", margin: "8px 0" }}>{passwordError}</div>}
@@ -2761,7 +2772,7 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
         <>
           <PasswordField value={draft} onChange={(e) => { setDraft(e.target.value); setError(""); }} placeholder="Όρισε κωδικό" onEnter={save} autoFocus />
           <div style={{ fontSize: 10.5, color: "var(--muted)", opacity: 0.7, margin: "10px 0", textAlign: "center" }}>
-            Θα χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα αρχείων, καθώς και όταν κάποιος θέλει να προσθέσει αυτό το όχημα στη λίστα του με τον κωδικό του.
+            Χρειάζεται για κάθε προβολή, λήψη ή ανέβασμα εγγράφου αλλά και για περισσότερες χρήσης.
           </div>
           <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>Επαναφορά κωδικού μετά από:</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>

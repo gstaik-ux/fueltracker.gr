@@ -50,3 +50,29 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
     vehicleIcon: target.vehicle_icon,
   });
 }
+
+// Removes the link both ways in one go, same reciprocal principle as
+// creating it - swiping to delete "Vehicle B" from Vehicle A's list also
+// removes Vehicle A from Vehicle B's list, everywhere, not just locally.
+// No password needed to unlink - only to link in the first place.
+export async function DELETE(req: NextRequest, { params }: { params: { slug: string } }) {
+  const { targetSlug } = await req.json();
+  if (!targetSlug) return NextResponse.json({ error: "Missing targetSlug" }, { status: 400 });
+
+  const meResult = await query("select id from vehicles where slug = $1", [params.slug]);
+  const meId = meResult.rows[0]?.id;
+  if (!meId) return NextResponse.json({ error: "Δεν βρέθηκε το τρέχον όχημα." }, { status: 404 });
+
+  const targetResult = await query("select id from vehicles where slug = $1", [targetSlug]);
+  const targetId = targetResult.rows[0]?.id;
+  if (!targetId) return NextResponse.json({ error: "Δεν βρέθηκε το όχημα." }, { status: 404 });
+
+  await query(
+    `delete from vehicle_links
+     where (vehicle_id = $1 and linked_vehicle_id = $2)
+        or (vehicle_id = $2 and linked_vehicle_id = $1)`,
+    [meId, targetId]
+  );
+
+  return NextResponse.json({ ok: true });
+}
