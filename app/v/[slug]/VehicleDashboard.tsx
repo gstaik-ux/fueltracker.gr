@@ -234,13 +234,24 @@ function useSound() {
 
 // Swipe a row left to reveal a delete action underneath - tap it to confirm.
 // Swipe a row left to reveal delete, or right to reveal edit - replaces the
-// old separate pencil-icon button entirely.
-function SwipeToDelete({ children, onDelete, onEdit }: { children: React.ReactNode; onDelete: () => void; onEdit?: () => void }) {
+// old separate pencil-icon button entirely. Pass showHint on just the first
+// row of a list to give it one brief automatic "peek" on mount, teaching
+// the gesture exists - never repeats after that, and nothing permanent
+// (like a chevron) stays on the row.
+function SwipeToDelete({ children, onDelete, onEdit, showHint }: { children: React.ReactNode; onDelete: () => void; onEdit?: () => void; showHint?: boolean }) {
   const [dragX, setDragX] = useState(0);
   const draggingRef = useRef(false);
   const startXRef = useRef(0);
   const startDragXRef = useRef(0);
   const REVEAL = 78;
+
+  useEffect(() => {
+    if (!showHint) return;
+    const peekTo = onEdit ? 26 : -26; // peek toward edit if available, else delete
+    const t1 = setTimeout(() => setDragX(peekTo), 500);
+    const t2 = setTimeout(() => setDragX(0), 1100);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [showHint, onEdit]);
 
   function start(clientX: number) {
     draggingRef.current = true;
@@ -285,7 +296,7 @@ function SwipeToDelete({ children, onDelete, onEdit }: { children: React.ReactNo
             onClick={() => { onEdit(); setDragX(0); }}
             style={{ width: REVEAL, flexShrink: 0, marginLeft: -REVEAL, background: "rgba(255,255,255,0.1)", border: "none", color: "var(--text)", fontSize: 11.5, fontWeight: 700 }}
           >
-            Επεξεργασία
+            Αλλαγή
           </button>
         )}
         <div style={{ width: "100%", flexShrink: 0 }}>{children}</div>
@@ -987,9 +998,7 @@ export default function VehicleDashboard({
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "28px 18px 100px", position: "relative", zIndex: 1, ["--accent" as any]: themeAccent }}>
         <div className="animate-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, padding: "0 4px", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="row-icon" style={{ background: `${themeAccent}22` }}>
-              <img src="/logo.png" alt="Carall" style={{ width: 17, height: 17, objectFit: "contain" }} />
-            </span>
+            <img src="/logo.png" alt="Carall" style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
             <div key={headerText || "name"} className="display animate-fade" style={{ fontSize: 17, fontWeight: 700 }}>
               {headerText || vehicle.name}
             </div>
@@ -1340,7 +1349,7 @@ export default function VehicleDashboard({
                           );
                         }
                         return (
-                          <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)}>
+                          <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={i === 0}>
                             <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                                 <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Icon size={15} color={themeAccent} /></span>
@@ -1415,7 +1424,7 @@ export default function VehicleDashboard({
                       }
 
                       return (
-                        <SwipeToDelete key={e.id} onDelete={() => removeEntry(e.id)} onEdit={() => startEdit(e)}>
+                        <SwipeToDelete key={e.id} onDelete={() => removeEntry(e.id)} onEdit={() => startEdit(e)} showHint={i === 0}>
                           <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                               <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Fuel size={15} color={themeAccent} /></span>
@@ -1565,7 +1574,7 @@ export default function VehicleDashboard({
                     );
                   }
                   return (
-                    <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)}>
+                    <SwipeToDelete key={e.id} onDelete={() => removeService(e.id)} onEdit={() => startEditService(e)} showHint={i === 0}>
                       <div className="row-fade" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 4px", borderBottom }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                           <span className="row-icon" style={{ background: `${themeAccent}1c` }}><Icon size={15} color={themeAccent} /></span>
