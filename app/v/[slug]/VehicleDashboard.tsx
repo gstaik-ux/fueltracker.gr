@@ -354,12 +354,14 @@ export default function VehicleDashboard({
   initialServiceEntries,
   initialTab = "main",
   isAdmin = false,
+  linkedVehicles = [],
 }: {
   vehicle: Vehicle;
   initialFillups: Fillup[];
   initialServiceEntries: ServiceEntry[];
   initialTab?: Tab;
   isAdmin?: boolean;
+  linkedVehicles?: { slug: string; name: string; themeAccent: string; vehicleIcon: string }[];
 }) {
   const slug = initialVehicle.slug;
   const themeAccent = initialVehicle.themeAccent;
@@ -422,43 +424,30 @@ export default function VehicleDashboard({
   const [soundMuted, setSoundMuted] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [settingsView, setSettingsView] = useState<string | null>(null);
-  const [myVehiclesList, setMyVehiclesList] = useState<{ slug: string; name: string; themeAccent: string; vehicleIcon: string }[]>([]);
+  const [myVehiclesList, setMyVehiclesList] = useState(linkedVehicles);
   const [showAddVehicleForm, setShowAddVehicleForm] = useState(false);
   const [addVehicleInput, setAddVehicleInput] = useState("");
+  const [addVehiclePassword, setAddVehiclePassword] = useState("");
   const [addVehicleError, setAddVehicleError] = useState("");
   const [addingVehicle, setAddingVehicle] = useState(false);
 
-  // Personal, per-device list of other vehicles pulled in by code or link -
-  // open to anyone, no admin password needed. Loaded once on mount, same
-  // localStorage-in-useEffect pattern as the mute preference above.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("carall_my_vehicles");
-      if (saved) setMyVehiclesList(JSON.parse(saved));
-    } catch {}
-  }, []);
-
-  async function addVehicleByCodeOrLink() {
-    const raw = addVehicleInput.trim();
-    if (!raw) return;
+  // Linking is reciprocal and stored server-side (vehicle_links table) -
+  // adding vehicle B from here also adds this vehicle to B's list, visible
+  // on any device, not just this one. Seeded from the server-fetched prop;
+  // this local state just lets the UI update instantly after adding one
+  // without needing a full page reload. Requires the target vehicle's own
+  // access password too - a bare 6-digit code alone isn't enough to link.
+  async function addVehicleByCode() {
+    const code = addVehicleInput.trim();
+    if (!/^\d{6}$/.test(code) || !addVehiclePassword) return;
     setAddingVehicle(true);
     setAddVehicleError("");
 
-    let url: string;
-    if (/^\d{6}$/.test(raw)) {
-      url = `/api/vehicle-lookup?code=${raw}`;
-    } else {
-      // Accept a pasted link in any form - just pull the slug out of it.
-      const match = raw.match(/\/v\/([a-z0-9-]+)/i);
-      if (!match) {
-        setAddingVehicle(false);
-        setAddVehicleError("Βάλε έναν έγκυρο σύνδεσμο ή 6ψήφιο κωδικό.");
-        return;
-      }
-      url = `/api/vehicle-lookup?slug=${match[1]}`;
-    }
-
-    const res = await fetch(url);
+    const res = await fetch(`/api/v/${slug}/link-vehicle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, password: addVehiclePassword }),
+    });
     setAddingVehicle(false);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -470,10 +459,9 @@ export default function VehicleDashboard({
       setAddVehicleError("Το όχημα είναι ήδη στη λίστα σου.");
       return;
     }
-    const next = [...myVehiclesList, { slug: data.slug, name: data.name, themeAccent: data.themeAccent || "#e7a33e", vehicleIcon: data.vehicleIcon || "car" }];
-    setMyVehiclesList(next);
-    localStorage.setItem("carall_my_vehicles", JSON.stringify(next));
+    setMyVehiclesList((prev) => [...prev, { slug: data.slug, name: data.name, themeAccent: data.themeAccent || "#e7a33e", vehicleIcon: data.vehicleIcon || "car" }]);
     setAddVehicleInput("");
+    setAddVehiclePassword("");
     setShowAddVehicleForm(false);
     playSuccess();
   }
@@ -1851,7 +1839,7 @@ export default function VehicleDashboard({
                     ) : (
                       <div style={{ padding: "14px 0", borderBottom: myVehiclesList.length > 0 ? "1px solid var(--hairline)" : "none" }}>
                         <div style={{ fontSize: 11.5, color: "var(--muted)", opacity: 0.8, marginBottom: 12 }}>
-                          Βάλε τον 6ψήφιο κωδικό οχήματος για να το προσθέσεις στη λίστα σου.
+                          Βάλε τον 6ψήφιο κωδικό και τον κωδικό πρόσβασης του οχήματος για να το προσθέσεις στη λίστα σου.
                         </div>
                         <input
                           className="pill-input"
@@ -1860,17 +1848,23 @@ export default function VehicleDashboard({
                           onChange={(e) => { setAddVehicleInput(e.target.value); setAddVehicleError(""); }}
                           style={{ marginBottom: 8 }}
                         />
-                        {addVehicleError && <div style={{ fontSize: 12, color: "#e2323a", marginBottom: 8, textAlign: "center" }}>{addVehicleError}</div>}
-                        <div style={{ display: "flex", gap: 8 }}>
+                        <PasswordField
+                          value={addVehiclePassword}
+                          onChange={(e) => { setAddVehiclePassword(e.target.value); setAddVehicleError(""); }}
+                          placeholder="Κωδικός πρόσβασης οχήματος"
+                          onEnter={addVehicleByCode}
+                        />
+                        {addVehicleError && <div style={{ fontSize: 12, color: "#e2323a", marginTop: 8, textAlign: "center" }}>{addVehicleError}</div>}
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                           <button
-                            onClick={addVehicleByCodeOrLink}
-                            disabled={addingVehicle || !/^\d{6}$/.test(addVehicleInput.trim())}
+                            onClick={addVehicleByCode}
+                            disabled={addingVehicle || !/^\d{6}$/.test(addVehicleInput.trim()) || !addVehiclePassword}
                             className="tap"
-                            style={{ flex: 1, background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "11px 0", opacity: /^\d{6}$/.test(addVehicleInput.trim()) ? 1 : 0.4 }}
+                            style={{ flex: 1, background: themeAccent, color: "#08090a", border: "none", borderRadius: 999, fontSize: 13, fontWeight: 700, padding: "11px 0", opacity: /^\d{6}$/.test(addVehicleInput.trim()) && addVehiclePassword ? 1 : 0.4 }}
                           >
                             {addingVehicle ? "..." : "Προσθήκη"}
                           </button>
-                          <button onClick={() => { setShowAddVehicleForm(false); setAddVehicleInput(""); setAddVehicleError(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 13, padding: "0 10px" }}>Άκυρο</button>
+                          <button onClick={() => { setShowAddVehicleForm(false); setAddVehicleInput(""); setAddVehiclePassword(""); setAddVehicleError(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 13, padding: "0 10px" }}>Άκυρο</button>
                         </div>
                       </div>
                     )}
@@ -1885,7 +1879,7 @@ export default function VehicleDashboard({
                           style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: i < arr.length - 1 ? "1px solid var(--hairline)" : "none", color: "var(--text)", textDecoration: "none", padding: "14px 0", fontSize: 14.5, fontWeight: 600 }}
                         >
                           <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <span className="row-icon" style={{ background: `${v.themeAccent}22` }}><VIcon size={15} color={v.themeAccent} /></span>
+                            <span className="row-icon" style={{ background: `${v.themeAccent || "#e7a33e"}22` }}><VIcon size={16} color={v.themeAccent || "#e7a33e"} /></span>
                             {v.name}
                           </span>
                           <ChevronRight size={16} color="var(--muted)" />
@@ -2760,14 +2754,14 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
     <div className="animate-in card" style={{ padding: "18px 18px 20px", marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: showForm ? 12 : 4 }}>
         <span className="row-icon" style={{ background: `${accent}22` }}><Lock size={16} color={accent} /></span>
-        <div className="display" style={{ fontSize: 15, fontWeight: 700 }}>Κωδικός Εγγράφων</div>
+        <div className="display" style={{ fontSize: 15, fontWeight: 700 }}>Κωδικός Πρόσβασης</div>
       </div>
 
       {showForm ? (
         <>
           <PasswordField value={draft} onChange={(e) => { setDraft(e.target.value); setError(""); }} placeholder="Όρισε κωδικό" onEnter={save} autoFocus />
           <div style={{ fontSize: 10.5, color: "var(--muted)", opacity: 0.7, margin: "10px 0", textAlign: "center" }}>
-            Θα χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα αρχείων.
+            Θα χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα αρχείων, καθώς και όταν κάποιος θέλει να προσθέσει αυτό το όχημα στη λίστα του με τον κωδικό του.
           </div>
           <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>Επαναφορά κωδικού μετά από:</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>

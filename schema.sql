@@ -68,6 +68,16 @@ where vehicle_code is null;
 alter table vehicles add column if not exists reminders_enabled boolean not null default true;
 alter table service_entries add column if not exists is_trip boolean not null default false;
 
+-- Reciprocal vehicle links: adding vehicle B from vehicle A's page links
+-- them both ways - A shows up in B's list too, on any device, since this
+-- is shared server-side state rather than a per-device personal list.
+create table if not exists vehicle_links (
+  vehicle_id uuid not null references vehicles(id) on delete cascade,
+  linked_vehicle_id uuid not null references vehicles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (vehicle_id, linked_vehicle_id)
+);
+
 -- Add your vehicles here (edit and run once per vehicle):
 -- insert into vehicles (slug, name, theme_accent, theme_bg, vehicle_icon, tank_capacity)
 -- values ('peugeot307', 'Peugeot 307 ''02', '#c9313f', '#050505', 'car', 60);

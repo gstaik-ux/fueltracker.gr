@@ -38,6 +38,15 @@ export default async function VehicleFuelPage({ params }: { params: { slug: stri
     [v.id]
   );
 
+  const linkedResult = await query(
+    `select v2.slug, v2.name, v2.theme_accent, v2.vehicle_icon
+     from vehicle_links vl
+     join vehicles v2 on v2.id = vl.linked_vehicle_id
+     where vl.vehicle_id = $1
+     order by v2.name`,
+    [v.id]
+  );
+
   const fillups = fillupsResult.rows.map((r: any) => ({
     id: r.id,
     date: toDateStr(r.date),
@@ -77,6 +86,7 @@ export default async function VehicleFuelPage({ params }: { params: { slug: stri
         lastOdometer,
       }}
       isAdmin={isCurrentlyAdmin}
+      linkedVehicles={linkedResult.rows.map((r: any) => ({ slug: r.slug, name: r.name, themeAccent: r.theme_accent, vehicleIcon: r.vehicle_icon }))}
       initialFillups={fillups}
       initialServiceEntries={serviceResult.rows.map((r: any) => ({
         id: r.id,
