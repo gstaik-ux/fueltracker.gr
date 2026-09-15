@@ -581,6 +581,7 @@ export default function VehicleDashboard({
   );
   const repairTotal = useMemo(() => repairHistory.reduce((s, e) => s + (e.cost || 0), 0), [repairHistory]);
 
+  const [showFirstEntryTip, setShowFirstEntryTip] = useState(false);
   function goToStep2() {
     const cost = num(form.cost);
     if (!isFinite(cost) || cost <= 0) {
@@ -589,6 +590,10 @@ export default function VehicleDashboard({
     }
     setError("");
     playTap();
+    if (entries.length === 0) {
+      setShowFirstEntryTip(true);
+      setShowDateFields(true); // so the fields it's asking for are already visible
+    }
     setLogStep(2);
   }
 
@@ -1085,7 +1090,7 @@ export default function VehicleDashboard({
 
               {overCapacityConfirm && (
                 <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 24 }} onClick={() => setOverCapacityConfirm(null)}>
-                  <div className="animate-pop card" style={{ padding: "22px 20px", maxWidth: 320, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+                  <div className="animate-pop card" style={{ padding: "22px 20px", maxWidth: 320, width: "100%", background: "#131417" }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
                       <span style={{ width: 42, height: 42, borderRadius: 99, background: "rgba(226,50,58,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <Gauge size={20} color="#e2323a" />
@@ -1099,6 +1104,25 @@ export default function VehicleDashboard({
                       <button onClick={() => setOverCapacityConfirm(null)} className="tap" style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 999, color: "var(--text)", fontSize: 13.5, fontWeight: 600, padding: "11px 0" }}>Άκυρο</button>
                       <button onClick={() => commitFillup(overCapacityConfirm.cost, overCapacityConfirm.liters)} className="tap" style={{ flex: 1, background: themeAccent, border: "none", borderRadius: 999, color: "#08090a", fontSize: 13.5, fontWeight: 700, padding: "11px 0" }}>Ναι, σωστά</button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {showFirstEntryTip && (
+                <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 24 }} onClick={() => setShowFirstEntryTip(false)}>
+                  <div className="animate-pop card" style={{ padding: "22px 20px", maxWidth: 320, width: "100%", background: "#131417" }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                      <span style={{ width: 42, height: 42, borderRadius: 99, background: `${themeAccent}22`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Sparkles size={20} color={themeAccent} />
+                      </span>
+                    </div>
+                    <div className="display" style={{ fontSize: 16, fontWeight: 700, textAlign: "center", marginBottom: 6 }}>Πρώτη καταχώρηση!</div>
+                    <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center", lineHeight: 1.5, marginBottom: 18 }}>
+                      Για καλύτερες μελλοντικές εκτιμήσεις κατανάλωσης και λίτρων, συμπληρώστε όσα περισσότερα στοιχεία σας είναι διαθέσιμα. Ευχαριστούμε πολύ.
+                    </div>
+                    <button onClick={() => setShowFirstEntryTip(false)} className="tap" style={{ width: "100%", background: themeAccent, border: "none", borderRadius: 999, color: "#08090a", fontSize: 13.5, fontWeight: 700, padding: "11px 0" }}>
+                      Κατάλαβα
+                    </button>
                   </div>
                 </div>
               )}
@@ -1953,19 +1977,36 @@ function DocCard({
     {showViewer && unlockedUrl && (
       <div
         onClick={() => setShowViewer(false)}
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       >
-        <button
-          onClick={() => setShowViewer(false)}
-          style={{ position: "fixed", top: "calc(20px + env(safe-area-inset-top, 0px))", right: 20, width: 40, height: 40, borderRadius: 99, background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          <X size={20} />
-        </button>
-        {isPdf ? (
-          <iframe src={unlockedUrl} title={title} onClick={(e) => e.stopPropagation()} style={{ width: "92vw", height: "85vh", border: "none", borderRadius: 12, background: "#fff" }} />
-        ) : (
-          <img src={unlockedUrl} alt={title} onClick={(e) => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12, objectFit: "contain" }} />
-        )}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10, maxWidth: "100%", maxHeight: "100%" }} onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setShowViewer(false)}
+            style={{ width: 34, height: 34, borderRadius: 99, background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+          >
+            <X size={18} />
+          </button>
+          {isPdf ? (
+            <iframe
+              src={`${unlockedUrl}#view=FitH`}
+              title={title}
+              className="pdf-viewer-frame"
+              style={{ border: "none", borderRadius: 12, background: "#fff", display: "block" }}
+            />
+          ) : (
+            <img
+              src={unlockedUrl}
+              alt={title}
+              style={{
+                maxWidth: "94vw",
+                maxHeight: "calc(100dvh - 100px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))",
+                borderRadius: 12,
+                objectFit: "contain",
+                display: "block",
+              }}
+            />
+          )}
+        </div>
       </div>
     )}
     </>
@@ -2013,7 +2054,7 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
           <div style={{ fontSize: 10.5, color: "var(--muted)", opacity: 0.7, margin: "10px 0", textAlign: "center" }}>
             Θα χρειάζεται σε κάθε προβολή, λήψη ή ανέβασμα - δεν αποθηκεύεται πουθενά, ούτε σε αυτή τη συσκευή.
           </div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>Αυτόματη επαναφορά μετά από:</div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>Επαναφορά κωδικού μετά από:</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             {[3, 6, 9].map((m) => (
               <button
@@ -2033,9 +2074,6 @@ function DocsPasswordCard({ slug, hasPassword, accent, onSet }: { slug: string; 
                 {m} μήνες
               </button>
             ))}
-          </div>
-          <div style={{ fontSize: 10.5, color: "var(--muted)", opacity: 0.7, marginBottom: 10, textAlign: "center" }}>
-            Μετά από {resetMonths} μήνες ο κωδικός διαγράφεται αυτόματα και εμφανίζεται ξανά αυτή η κάρτα - είτε τον ξέχασες, είτε θες απλά να τον αλλάξεις.
           </div>
           {error && <div style={{ fontSize: 12, color: "#e2323a", textAlign: "center", marginBottom: 8 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>

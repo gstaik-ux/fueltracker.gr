@@ -132,6 +132,20 @@ button:active { transform: scale(0.96); }
 .trip-toast { animation: fadeInOut 1.6s ease both; }
 .banner-fade { animation: fadeInOut 5s ease both; }
 
+/* PDF viewer frame - a wide horizontal box on desktop/tablet, but a taller
+   vertical box on phones (matching a typical portrait PDF page) instead of
+   a squashed short rectangle. */
+.pdf-viewer-frame {
+  width: min(1300px, 92vw);
+  height: 400px;
+}
+@media (max-width: 600px) {
+  .pdf-viewer-frame {
+    width: 88vw;
+    height: 70vh;
+  }
+}
+
 @keyframes shimmer {
   0% { background-position: -200px 0; }
   100% { background-position: 200px 0; }
