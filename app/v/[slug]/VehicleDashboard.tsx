@@ -278,8 +278,12 @@ function SwipeToDelete({ children, onDelete, onEdit, showHint, onHintShown }: { 
   function move(clientX: number) {
     if (!draggingRef.current) return;
     const next = startDragXRef.current + (clientX - startXRef.current);
-    const min = onEdit ? -REVEAL : 0;
-    setDragX(Math.min(REVEAL, Math.max(next, min)));
+    // Leftward (negative, reveals delete) is always allowed - delete is
+    // always available. Rightward (positive, reveals edit) only goes
+    // anywhere if onEdit was actually provided, otherwise it's clamped
+    // to 0 so there's nothing to reveal on that side.
+    const max = onEdit ? REVEAL : 0;
+    setDragX(Math.min(max, Math.max(next, -REVEAL)));
   }
   function end() {
     if (!draggingRef.current) return;
